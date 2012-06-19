@@ -1,26 +1,8 @@
 #ifndef __STREAM__H
 #define __STREAM__H
 
-/* Note: These three types is used by fcgi to guess which type of stream it's
- * currently working on.
- *
- * TODO: Stream should only have two directions.
- */
-enum stream_type {
-	S_IN  = 5,
-	S_OUT = 6,
-	S_ERR = 7,
-};
-
-enum stream_state {
-	S_OPEN,
-	S_CLOSED,
-};
-
 struct pkg_stream {
 	int fd;                  /* Stream file descriptor. */
-	enum stream_type type;   /* Type of stream, input or output. */
-	enum stream_state state; /* State of stream, open or closed. */
 	size_t body_end;         /* End of body in buffer.
 				  * In output stream, end of last
 				  * encapsulated body. */
@@ -70,10 +52,7 @@ void
 stream_open(struct pkg_stream *s);
 
 int
-stream_init(struct pkg_stream *s,
-	int fd,
-	enum stream_type t,
-	size_t buffer_size);
+stream_init(struct pkg_stream *s, int fd, size_t buffer_size);
 
 void
 stream_destroy(struct pkg_stream *s);

@@ -17,7 +17,6 @@
 size_t
 stream_rem(struct pkg_stream *s)
 {
-	assert(s->type == S_IN || s->end == s->size);
 	assert(s->end >= s->pos);
 	return (s->end - s->pos);
 }
@@ -114,33 +113,7 @@ stream_reset(struct pkg_stream *s)
 	s->body_end = 0;
 	s->body_pad = 0;
 	s->pos      = 0;
-	s->end      = s->type == S_OUT ? s->size : 0;
-}
-
-/**
- * stream_close - close a stream for reading/writing
- * @s: stream to close
- */
-void
-stream_close(struct pkg_stream *s)
-{
-	if (s->state == S_CLOSED)
-		debug("Stream already closed.");
-
-	s->state = S_CLOSED;
-}
-
-/**
- * stream_open - open a stream for reading/writing
- * @s: stream to open
- */
-void
-stream_open(struct pkg_stream *s)
-{
-	if (s->state == S_OPEN)
-		debug("Stream already open.");
-
-	s->state = S_OPEN;
+	s->end      = 0;
 }
 
 /*
@@ -149,7 +122,6 @@ stream_open(struct pkg_stream *s)
 int
 stream_init(struct pkg_stream *s,
 		int fd,
-		enum stream_type t,
 		size_t buffer_size)
 {
 	unsigned char *buffer;
@@ -158,8 +130,6 @@ stream_init(struct pkg_stream *s,
 	check_mem(buffer);
 
 	s->fd     = fd;
-	s->type   = t;
-	s->state  = S_CLOSED;
 	s->size   = buffer_size;
 	s->buffer = buffer;
 
@@ -198,9 +168,6 @@ stream_refill(struct pkg_stream *s)
 {
 	ssize_t cnt;
 
-	assert(s->type == S_IN);
-	check_debug(s->state != S_CLOSED,
-		"Stream is closed.");
 	check_debug(stream_rem(s) == 0,
 		"Unread data remain in buffer.");
 
@@ -226,8 +193,6 @@ stream_flush(struct pkg_stream *s)
 {
 	ssize_t ret;
 
-	assert(s->type == S_OUT);
-	assert(s->state != S_CLOSED);
 	check(s->pos > 0, "Buffer is empty.");
 	check(s->body_end == s->pos - s->body_pad,
 		"Some data not encapsulated.");
@@ -267,8 +232,6 @@ stream_skip(struct pkg_stream *s, const size_t nbyte)
 	size_t len, cnt = 0;
 
 	assert(s != NULL);
-	assert(s->type == S_IN);
-	assert(s->state == S_OPEN);
 
 	do {
 		if (stream_rem(s) == 0) {
@@ -295,8 +258,6 @@ stream_write(struct pkg_stream *s, const void *buf, const size_t nbyte)
 	size_t fill;
 
 	assert(s != NULL);
-	assert(s->type != S_IN);
-	assert(s->state != S_CLOSED);
 	assert(buf != NULL);
 
 	fill = MIN(stream_rem(s), nbyte);
@@ -321,8 +282,6 @@ stream_read(struct pkg_stream *s, void *buf, const size_t nbyte)
 	size_t fill;
 
 	assert(s != NULL);
-	assert(s->type == S_IN);
-	assert(s->state != S_CLOSED);
 	assert(buf != NULL);
 
 	rem = stream_rem(s);
