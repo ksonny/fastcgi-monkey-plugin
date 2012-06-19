@@ -164,19 +164,24 @@ stream_destroy(struct pkg_stream *s)
 ssize_t
 stream_refill(struct pkg_stream *s)
 {
-	ssize_t cnt;
+	size_t  buffer_remain;
+	ssize_t bytes_read;
 
-	check_debug(stream_rem(s) == 0,
-		"Unread data remain in buffer.");
+	if (stream_rem(s) == 0) {
+		s->body_end   = MIN(0, s->body_end - s->end);
+		s->pos        = 0;
+		s->end        = 0;
+		buffer_remain = s->size;
+	} else {
+		buffer_remain = s->size - s->end;
+	}
 
-	cnt = read(s->fd, s->buffer, s->size);
-	check(cnt != -1, "Error on socket.");
+	bytes_read = read(s->fd, s->buffer, buffer_remain);
+	check(bytes_read > -1, "Error on socket.");
 
-	s->body_end = MIN(0, s->body_end - s->end);
-	s->pos = 0;
-	s->end = cnt;
+	s->end += bytes_read;
 
-	return cnt;
+	return bytes_read;
 error:
 	return -1;
 }
