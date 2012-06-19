@@ -9,8 +9,6 @@
 #include "dbg.h"
 #include "stream.h"
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-
 /*
  * Remaining bytes in stream.
  */

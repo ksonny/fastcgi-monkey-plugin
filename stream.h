@@ -1,6 +1,8 @@
 #ifndef __STREAM__H
 #define __STREAM__H
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 struct pkg_stream {
 	int fd;                  /* Stream file descriptor. */
 	size_t body_end;         /* End of body in buffer.
