@@ -143,7 +143,6 @@ void
 stream_destroy(struct pkg_stream *s)
 {
 	stream_reset(s);
-	stream_close(s);
 
 	if (s->fd >= 0) {
 		close(s->fd);
