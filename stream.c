@@ -15,62 +15,19 @@
 size_t
 stream_rem(struct pkg_stream *s)
 {
-	assert(s->end >= s->pos);
 	return (s->end - s->pos);
 }
 
-/*
- * Remaining bytes on body.
- */
-size_t
-stream_body_rem(struct pkg_stream *s)
-{
-	if (s->body_end >= s->pos)
-		return (s->body_end - s->pos);
-	else
-		return 0;
-}
-
-/*
- * Set pkg counters.
- *
- * This function simply sets the counters inside of the stream so
- * stream_body_rem will report correct length. No effort is made to
- * prevent reading beyond a body.
- *
- * These counters are inside the stream to ease interactions with
- * protocols that sends packages with header and body.
- *
- * Note: Body may extend beyond current buffer.
- * Note: body_len should not include space for the header nor padding.
- */
-void
-stream_set_pkg(struct pkg_stream *s,
-	size_t head_len,
-	size_t body_len,
-	size_t body_pad)
-{
-	s->body_end += head_len + body_len;
-	s->body_pad  = body_pad;
-}
-
-/**
- * stream_get_pkg_end - offset of last byte used by pkg
- */
-size_t
-stream_get_pkg_end(struct pkg_stream *s)
-{
-	return (s->body_end + s->body_pad);
-}
 
 /*
  * Get current position in stream.
  */
-unsigned char *
-stream_pos(struct pkg_stream *s)
+uint8_t *
+stream_ptr(struct pkg_stream *s)
 {
 	assert(s->pos < s->end);
 	assert(s->pos < s->size);
+
 	return (s->buffer + s->pos);
 }
 
@@ -108,10 +65,11 @@ stream_commit(struct pkg_stream *s, size_t nbytes)
 void
 stream_reset(struct pkg_stream *s)
 {
-	s->body_end = 0;
-	s->body_pad = 0;
-	s->pos      = 0;
-	s->end      = 0;
+	s->pkg_start = 0;
+	s->pkg_end   = 0;
+	s->pkg_pad   = 0;
+	s->pos       = 0;
+	s->end       = 0;
 }
 
 /*
@@ -122,7 +80,7 @@ stream_init(struct pkg_stream *s,
 		int fd,
 		size_t buffer_size)
 {
-	unsigned char *buffer;
+	uint8_t *buffer;
 
 	buffer = malloc(buffer_size);
 	check_mem(buffer);
@@ -167,7 +125,8 @@ stream_refill(struct pkg_stream *s)
 	ssize_t bytes_read;
 
 	if (stream_rem(s) == 0) {
-		s->body_end   = MIN(0, s->body_end - s->end);
+		s->pkg_start  = s->pkg_start - s->end;
+		s->pkg_end    = s->pkg_end   - s->end;
 		s->pos        = 0;
 		s->end        = 0;
 		buffer_remain = s->size;
@@ -196,12 +155,12 @@ stream_flush(struct pkg_stream *s)
 	ssize_t ret;
 
 	check(s->pos > 0, "Buffer is empty.");
-	check(s->body_end == s->pos - s->body_pad,
+	check(s->pkg_end + s->pkg_pad == s->pos,
 		"Some data not encapsulated.");
 
-	ret = write(s->fd, s->buffer, s->pos + s->body_pad);
+	ret = write(s->fd, s->buffer, s->pos);
 	check(ret != -1, "Error on socket.");
-	check((size_t)ret == s->pos + s->body_pad, "Failed to flush stream.");
+	check((size_t)ret == s->pos, "Failed to flush stream.");
 
 	stream_reset(s);
 
@@ -266,7 +225,7 @@ stream_write(struct pkg_stream *s, const void *buf, const size_t nbyte)
 
 	check_debug(fill > 0, "Stream is full.");
 
-	memcpy(stream_pos(s), buf, fill);
+	memcpy(stream_ptr(s), buf, fill);
 	stream_commit(s, fill);
 
 	return fill;
@@ -290,7 +249,7 @@ stream_read(struct pkg_stream *s, void *buf, const size_t nbyte)
 	check_debug(rem > 0, "Stream is empty.");
 	fill = MIN(rem, nbyte);
 
-	memcpy(buf, stream_pos(s), fill);
+	memcpy(buf, stream_ptr(s), fill);
 	stream_commit(s, fill);
 
 	return fill;
@@ -315,12 +274,69 @@ stream_refill_read(struct pkg_stream *s, void *buf, const size_t nbyte)
 
 	rem = nbyte - cnt;
 
-	cnt = read(s->fd, (unsigned char *)buf + cnt, rem);
+	cnt = read(s->fd, (uint8_t *)buf + cnt, rem);
 	check(cnt != -1, "Error on socket.");
 
-	s->body_end = s->body_end - MIN(s->body_end, (size_t)cnt);
+	s->pkg_end = s->pkg_end - cnt;
 
 	return cnt;
 error:
 	return -1;
+}
+
+/*
+ * Remaining bytes on package.
+ */
+size_t
+stream_pkg_rem(struct pkg_stream *s)
+{
+	if (s->pkg_end >= (ssize_t)s->pos)
+		return (s->pkg_end - s->pos);
+	else
+		return 0;
+}
+
+size_t
+stream_pkg_mark_end(struct pkg_stream *s)
+{
+	s->pkg_start = s->pkg_end + s->pkg_pad;
+	s->pkg_end   = s->pos;
+	s->pkg_pad   = 0;
+
+	return (s->pkg_end - s->pkg_start);
+}
+
+int
+stream_pkg_pad(struct pkg_stream *s, size_t pad)
+{
+	assert(s->pkg_end == (ssize_t)s->pos);
+	assert(s->pkg_pad == 0);
+
+	s->pkg_pad = pad;
+	stream_commit(s, pad);
+
+	return 0;
+}
+
+int
+stream_pkg_goto_start(struct pkg_stream *s)
+{
+	/* TODO: Convert to non-terminating errors. */
+	assert(s->pkg_start >= 0);
+	assert(s->pos == s->pkg_end + s->pkg_pad);
+
+	s->pos = s->pkg_start;
+
+	return 0;
+}
+
+int
+stream_pkg_goto_end(struct pkg_stream *s)
+{
+	/* TODO: Convert to non-terminating errors. */
+	assert(s->end >= s->pkg_end + s->pkg_pad);
+
+	s->pos = s->pkg_end + s->pkg_pad;
+
+	return 0;
 }

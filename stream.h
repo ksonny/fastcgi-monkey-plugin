@@ -4,54 +4,30 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 struct pkg_stream {
-	int fd;                  /* Stream file descriptor. */
-	size_t body_end;         /* End of body in buffer.
-				  * In output stream, end of last
-				  * encapsulated body. */
-	size_t body_pad;         /* Length of body padding.
-				  * In output stream, padding of last
-				  * encapsulated body. */
-	size_t end;              /* End of buffer content.
-				  * Unused in output stream. */
-	size_t pos;              /* Position in buffer. */
-	size_t size;             /* Size of buffer. */
-	unsigned char *buffer;   /* Stream buffer array. */
+	int fd;
+	ssize_t pkg_start;
+	ssize_t pkg_end;
+	size_t  pkg_pad;
+	size_t  end;
+	size_t  pos;
+	size_t  size;
+	uint8_t *buffer;
 };
-
-size_t
-stream_rem(struct pkg_stream *s);
-
-size_t
-stream_body_rem(struct pkg_stream *s);
-
-void
-stream_set_pkg(struct pkg_stream *s,
-	size_t head_len,
-	size_t body_len,
-	size_t body_pad);
-size_t
-stream_get_pkg_end(struct pkg_stream *s);
-
-unsigned char *
-stream_pos(struct pkg_stream *s);
 
 size_t
 stream_get_pos(struct pkg_stream *s);
 
-void
-stream_set_pos(struct pkg_stream *s, size_t pos);
+uint8_t *
+stream_ptr(struct pkg_stream *s);
+
+size_t
+stream_rem(struct pkg_stream *s);
 
 void
 stream_commit(struct pkg_stream *s, size_t nbytes);
 
 void
 stream_reset(struct pkg_stream *s);
-
-void
-stream_close(struct pkg_stream *s);
-
-void
-stream_open(struct pkg_stream *s);
 
 int
 stream_init(struct pkg_stream *s, int fd, size_t buffer_size);
@@ -79,5 +55,20 @@ stream_read(struct pkg_stream *s, void *buf, const size_t nbyte);
 
 ssize_t
 stream_refill_read(struct pkg_stream *s, void *buf, const size_t nbyte);
+
+size_t
+stream_pkg_rem(struct pkg_stream *s);
+
+size_t
+stream_pkg_mark_end(struct pkg_stream *s);
+
+int
+stream_pkg_pad(struct pkg_stream *s, size_t pad);
+
+int
+stream_pkg_goto_start(struct pkg_stream *s);
+
+int
+stream_pkg_goto_end(struct pkg_stream *s);
 
 #endif /* __STREAM__H */

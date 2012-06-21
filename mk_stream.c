@@ -24,6 +24,17 @@ error:
 void
 mk_stream_destroy(struct pkg_stream *s)
 {
+	stream_reset(s);
+	if (!(s->fd < 0)) {
+		close(s->fd);
+		s->fd = -1;
+	}
+
+	if (s->buffer) {
+		free(s->buffer);
+		s->buffer = NULL;
+	}
+
 }
 
 ssize_t
@@ -33,7 +44,8 @@ mk_stream_refill(struct pkg_stream *s)
 	ssize_t bytes_read;
 
 	if (stream_rem(s) == 0) {
-		s->body_end   = MIN(0, s->body_end - s->end);
+		s->pkg_start  = s->pkg_start - s->end;
+		s->pkg_end    = s->pkg_end   - s->end;
 		s->pos        = 0;
 		s->end        = 0;
 		buffer_remain = s->size;
@@ -57,12 +69,12 @@ mk_stream_flush(struct pkg_stream *s)
 	ssize_t ret;
 
 	check(s->pos > 0, "Buffer is empty.");
-	check(s->body_end == s->pos - s->body_pad,
+	check(s->pkg_end + s->pkg_pad == s->pos,
 		"Some data not encapsulated.");
 
-	ret = mk_api->socket_send(s->fd, s->buffer, s->pos + s->body_pad);
+	ret = mk_api->socket_send(s->fd, s->buffer, s->pos);
 	check(ret != -1, "Error on socket.");
-	check((size_t)ret == s->pos + s->body_pad, "Failed to flush stream.");
+	check((size_t)ret == s->pos, "Failed to flush stream.");
 
 	stream_reset(s);
 
