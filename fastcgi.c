@@ -54,6 +54,104 @@ error:
 	return -1;
 }
 
+#define __write_param(env, len, pos, key, value) do { \
+		check(len - pos > fcgi_param_write(NULL, key, value), \
+			"Out of memory."); \
+		pos += fcgi_param_write(env + pos, key, value); \
+	} while (0)
+
+mk_pointer fcgi_create_env(struct session_request *sr)
+{
+	mk_pointer key, value;
+	char buffer[128];
+	char *tmpuri = NULL;
+	size_t pos = 0, len = 4096;
+	uint8_t *env;
+
+	env = mk_api->mem_alloc(len);
+	check_mem(env);
+
+	mk_api->pointer_set(&key,   "PATH_INFO");
+	mk_api->pointer_set(&value, "");
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "GATEWAY_INTERFACE");
+	mk_api->pointer_set(&value, "CGI/1.1");
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "REDIRECT_STATUS");
+	mk_api->pointer_set(&value, "200");
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "SERVER_SOFTWARE");
+	mk_api->pointer_set(&value, sr->host_conf->host_signature);
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "SCRIPT_FILENAME");
+	value = sr->real_path;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "SCRIPT_NAME");
+	value = sr->uri_processed;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "REQUEST_METHOD");
+	value = sr->method_p;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "HTTP_HOST");
+	value = sr->host;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "SERVER_PROTOCOL");
+	value = sr->protocol_p;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "REQUEST_URI");
+	if (sr->query_string.len > 0) {
+		value.len = sr->uri.len + sr->query_string.len + 2;
+		tmpuri = mk_api->mem_alloc(value.len);
+		check_mem(tmpuri);
+		value.data = tmpuri;
+		snprintf(value.data, value.len, "%.*s?%.*s",
+			(int)sr->uri.len, sr->uri.data,
+			(int)sr->query_string.len, sr->query_string.data);
+	} else {
+		value = sr->uri;
+	}
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "QUERY_STRING");
+	value = sr->query_string;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "CONTENT_TYPE");
+	value = sr->content_type;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "CONTENT_LENGTH");
+	snprintf(buffer, 128, "%d", sr->content_length);
+	mk_api->pointer_set(&value, buffer);
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "HTTP_COOKIE");
+	value = mk_api->header_get(&sr->headers_toc, "Cookie:", 7);
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "HTTP_USER_AGENT");
+	value = mk_api->header_get(&sr->headers_toc, "User-Agent:", 11);
+	__write_param(env, len, pos, key, value);
+
+	if (tmpuri) mk_api->mem_free(tmpuri);
+	return (mk_pointer){ .len = pos, .data = (char *)env };
+error:
+	if (tmpuri) mk_api->mem_free(tmpuri);
+	if (env) mk_api->mem_free(env);
+	return (mk_pointer){ .len = 0, .data = NULL };
+}
+
+#undef __write_param
+
 int _mkp_init(struct plugin_api **api, char *confdir)
 {
 	mk_api = *api;
