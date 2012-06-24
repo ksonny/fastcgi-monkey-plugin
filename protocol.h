@@ -74,12 +74,12 @@ size_t
 fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b);
 
 size_t
-fcgi_write_begin_req(uint8_t *p,
-		const uint16_t req_id,
-		const enum fcgi_role role,
-		const uint8_t flags);
+fcgi_param_read_length(uint8_t *p);
 
-void
-fcgi_print_pkg_names(uint8_t *p);
+size_t
+fcgi_param_write(uint8_t *p,
+	mk_pointer key,
+	mk_pointer value);
+
 
 #endif // MK_FASTCGI_PROTOCOL

@@ -35,8 +35,7 @@ const char *fcgi_role_str[] = {
 	[FCGI_FILTER]     = "FCGI_FILTER",
 };
 
-int
-fcgi_validate_struct_sizes(void)
+int fcgi_validate_struct_sizes(void)
 {
 	struct fcgi_header header;
 	struct fcgi_begin_req_body begin_body;
@@ -54,8 +53,7 @@ error:
 	return -1;
 }
 
-size_t
-fcgi_read_header(uint8_t *p, struct fcgi_header *h)
+size_t fcgi_read_header(uint8_t *p, struct fcgi_header *h)
 {
 	h->version  = p[0];
 	h->type     = p[1];
@@ -66,8 +64,7 @@ fcgi_read_header(uint8_t *p, struct fcgi_header *h)
 	return sizeof(*h);
 }
 
-size_t
-fcgi_write_header(uint8_t *p, const struct fcgi_header *h)
+size_t fcgi_write_header(uint8_t *p, const struct fcgi_header *h)
 {
 	p[0] = h->version;
 	p[1] = h->type;
@@ -76,18 +73,15 @@ fcgi_write_header(uint8_t *p, const struct fcgi_header *h)
 	p[4] = (h->body_len >> 8) & 0xff;
 	p[5] = (h->body_len)      & 0xff;
 	p[6] = h->body_pad;
-	p[7] = 0;
 
 	return sizeof(*h);
 }
 
-size_t
-fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b)
+size_t fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b)
 {
 	p[0] = (b->role >> 8) & 0xff;
 	p[1] = (b->role)      & 0xff;
 	p[2] = b->flags;
-	bzero(p + 3, 5);
 
 	return sizeof(*b);
 }
@@ -115,4 +109,65 @@ fcgi_write_begin_req(uint8_t *p,
 	bytes += fcgi_write_begin_req_body(p, &b);
 
 	return bytes;
+}
+
+size_t fcgi_param_read_length(uint8_t *p)
+{
+	size_t len;
+
+	if (p[0] >> 7 == 1) {
+		len  = (p[0] & 0x7f) << 24;
+		len += (p[1])        << 16;
+		len += (p[2])        <<  8;
+		len += (p[3]);
+	} else {
+		len = p[0];
+	}
+
+	return len;
+}
+
+static size_t write_length(uint8_t *p, size_t len)
+{
+	if (len > 127) {
+		p[0]  = 1 << 7;
+		p[0] += (len >> 24) & 0x7f;
+		p[1]  = (len >> 16) & 0xff;
+		p[2]  = (len >>  8) & 0xff;
+		p[3]  = (len)       & 0xff;
+
+		return 4;
+	} else {
+		p[0] = len & 0x7f;
+
+		return 1;
+	}
+}
+
+size_t fcgi_param_write(uint8_t *p,
+	mk_pointer key,
+	mk_pointer value)
+{
+	size_t ret, cnt;
+
+	if (!p) {
+		cnt  = (key.len > 127 ? 4 : 1) + (value.len > 127 ? 4 : 1);
+		cnt += key.len + value.len;
+		return cnt;
+	}
+
+	cnt  = 0;
+	ret  = write_length(p + cnt, key.len);
+	cnt += ret;
+
+	ret  = write_length(p + cnt, value.len);
+	cnt += ret;
+
+	memcpy(p + cnt, key.data, key.len);
+	cnt += key.len;
+
+	memcpy(p + cnt, value.data, value.len);
+	cnt += value.len;
+
+	return cnt;
 }
