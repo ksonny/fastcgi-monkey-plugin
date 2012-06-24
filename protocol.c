@@ -1,34 +1,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>
+#include <assert.h>
 
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <fcntl.h>
+// #include <arpa/inet.h>
+// #include <sys/types.h>
+// #include <sys/socket.h>
+// #include <netdb.h>
+// #include <fcntl.h>
 
 #include "MKPlugin.h"
+#include "dbg.h"
+#include "protocol.h"
 
-#define FCGI_MAX_LENGTH 0xffff
-#define FCGI_HEADER_LEN 8
-#define FCGI_BEGIN_REQ_LEN 16
-#define FCGI_VERSION_1 1
-
-enum fcgi_msg_type {
-	FCGI_BEGIN_REQUEST	= 1,
-	FCGI_ABORT_REQUEST	= 2,
-	FCGI_END_REQUEST	= 3,
-	FCGI_PARAMS		= 4,
-	FCGI_STDIN              = 5,
-	FCGI_STDOUT             = 6,
-	FCGI_STDERR             = 7,
-	FCGI_DATA               = 8,
-	FCGI_GET_VALUES         = 9,
-	FCGI_GET_VALUES_RESULT	= 10,
-	FCGI_UNKNOWN_TYPE	= 11,
-};
+#define FCGI_BUFFER_SIZE 8192
 
 const char *fcgi_msg_type_str[] = {
 	[0]                      = "NULL MSG TYPE",
@@ -45,38 +30,11 @@ const char *fcgi_msg_type_str[] = {
 	[FCGI_UNKNOWN_TYPE]      = "FCGI_UNKNOWN_TYPE",
 };
 
-enum fcgi_role {
-	FCGI_RESPONDER  = 1,
-	FCGI_AUTHORIZER = 2,
-	FCGI_FILTER     = 3,
-};
-
 const char *fcgi_role_str[] = {
 	[0]               = "NULL ROLE",
 	[FCGI_RESPONDER]  = "FCGI_RESPONDER",
 	[FCGI_AUTHORIZER] = "FCGI_AUTHORIZER",
 	[FCGI_FILTER]     = "FCGI_FILTER",
-};
-
-struct fcgi_header {
-	uint8_t  version;
-	uint8_t  type;
-	uint16_t req_id;
-	uint16_t body_len;
-	uint8_t  body_pad;
-	// uint8_t reserved[1];
-};
-
-struct fcgi_begin_req_body {
-	uint16_t role;
-	uint8_t  flags;
-	// uint8_t reserved[5];
-};
-
-struct fcgi_end_req_body {
-	uint32_t application_status;
-	uint8_t  protocol_status;
-	// uint8_t  reserved[3];
 };
 
 void
