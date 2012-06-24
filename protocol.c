@@ -36,48 +36,67 @@ const char *fcgi_role_str[] = {
 };
 
 void
-fcgi_read_header(uint8_t *p, struct fcgi_header *h)
+fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h)
 {
-	uint16_t x;
+	uint8_t *p;
+	assert(stream_rem(s) >= FCGI_HEADER_LEN);
+
+	p = stream_ptr(s);
 
 	h->version  = p[0];
 	h->type     = p[1];
-	memcpy(&x, p + 2, sizeof(x));
-	h->req_id   = ntohs(x);
-	memcpy(&x, p + 4, sizeof(x));
-	h->body_len = ntohs(x);
+	h->req_id   = (p[2] << 8) + p[3];
+	h->body_len = (p[4] << 8) + p[5];
 	h->body_pad = p[6];
-}
 
-void
-fcgi_write_header(uint8_t *p, const struct fcgi_header *h)
-{
-	uint16_t x;
-
-	p[0] = h->version;
-	p[1] = h->type;
-	x    = htons(h->req_id);
-	memcpy(p + 2, &x, sizeof(x));
-	x    = htons(h->body_len);
-	memcpy(p + 4, &x, sizeof(x));
-	p[6] = h->body_pad;
-	p[7] = 0;
-}
-
-void
-fcgi_write_begin_req_body(uint8_t *p,
-		const struct fcgi_begin_req_body *b)
-{
-	uint16_t x;
-
-	x    = htons(b->role);
-	memcpy(p + 0, &x, sizeof(x));
-	p[2] = b->flags;
-	memset(p + 3, 0, 5);
+	stream_commit(s, FCGI_HEADER_LEN);
 }
 
 int
-fcgi_write_begin_req(mk_pointer p,
+fcgi_write_header(struct pkg_stream *s, const struct fcgi_header *h)
+{
+	uint8_t p[8];
+
+	check(stream_rem(s) > sizeof(p),
+		"Not enough space on stream. Rem: %ld, Size: %ld",
+		stream_rem(s), sizeof(p));
+
+	p[0] = h->version;
+	p[1] = h->type;
+	p[2] = (h->req_id >> 8)   & 0xff;
+	p[3] = (h->req_id)        & 0xff;
+	p[4] = (h->body_len >> 8) & 0xff;
+	p[5] = (h->body_len)      & 0xff;
+	p[6] = h->body_pad;
+	p[7] = 0;
+
+	stream_write(s, p, sizeof(p));
+
+	return 0;
+error:
+	return -1;
+}
+
+int
+fcgi_write_begin_req_body(struct pkg_stream *s,
+		const struct fcgi_begin_req_body *b)
+{
+	uint8_t p[8];
+
+	assert(stream_rem(s) > sizeof(p));
+
+	p[0] = (b->role >> 8) & 0xff;
+	p[1] = (b->role)      & 0xff;
+	p[2] = b->flags;
+	bzero(p + 3, 5);
+
+	stream_write(s, p, sizeof(p));
+
+	return 0;
+}
+
+int
+fcgi_write_begin_req(struct pkg_stream *s,
 		const uint16_t req_id,
 		const enum fcgi_role role,
 		const uint8_t flags)
@@ -86,7 +105,7 @@ fcgi_write_begin_req(mk_pointer p,
 		.version  = FCGI_VERSION_1,
 		.type     = FCGI_BEGIN_REQUEST,
 		.req_id   = req_id,
-		.body_len = FCGI_BEGIN_REQ_LEN - FCGI_HEADER_LEN,
+		.body_len = 8,
 		.body_pad = 0,
 	};
 	struct fcgi_begin_req_body b = {
@@ -94,15 +113,13 @@ fcgi_write_begin_req(mk_pointer p,
 		.flags    = flags,
 	};
 
-	if (p.len >= FCGI_BEGIN_REQ_LEN) {
-		PLUGIN_TRACE("Buffer is not FCGI_BEGIN_REQ_LEN.");
-		goto exit;
-	}
+	check(stream_rem(s) > 16, "Buffer is not FCGI_BEGIN_REQ_LEN.");
 
-	fcgi_write_header((uint8_t *)p.data + 0, &h);
-	fcgi_write_begin_req_body((uint8_t *)p.data + FCGI_HEADER_LEN, &b);
+	fcgi_write_header(s, &h);
+	fcgi_write_begin_req_body(s, &b);
+	stream_pkg_mark_end(s);
 
 	return 0;
-exit:
+error:
 	return -1;
 }
