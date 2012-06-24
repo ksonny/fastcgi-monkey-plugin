@@ -74,6 +74,10 @@ int fcgi_send_request(int fcgi_fd,
 		struct client_session *cs,
 		struct session_request *sr)
 {
+	struct fcgi_begin_req_body b = {
+		.role  = FCGI_RESPONDER,
+		.flags = 0,
+	};
 	struct fcgi_header h = {
 		.version  = FCGI_VERSION_1,
 		.type     = 0,
@@ -81,38 +85,49 @@ int fcgi_send_request(int fcgi_fd,
 		.body_len = 0,
 		.body_pad = 0,
 	};
+
 	ssize_t bytes_sent;
-	struct pkg_stream ps;
+	struct mk_iov *iov;
+	size_t len = 3 * sizeof(h) + sizeof(b);
+	uint8_t *p = NULL;
 
-	check(!mk_stream_init(&ps, fcgi_fd, 4096), "Failed to create stream.");
-	ps.end = ps.size;
+	iov = mk_api->iov_create(4, 0);
+	check_mem(iov);
 
-	// Write BEGIN_REQ.
-	check(!fcgi_write_begin_req(&ps, 1, FCGI_RESPONDER, 0),
-		"Failed to write begin req.");
+	p = mk_api->mem_alloc(len);
+	check_mem(p);
+	mk_api->iov_add_entry(iov,
+		(char *)p,
+		len,
+		mk_iov_none,
+		MK_IOV_FREE_BUF);
 
-	// Write PARAMS eos.
-	h.type     = FCGI_PARAMS;
+	// Write begin request.
+	h.type     = FCGI_BEGIN_REQUEST;
+	h.body_len = sizeof(b);
+	fcgi_write_header(p, &h);
+	p += sizeof(h);
+	fcgi_write_begin_req_body(p, &b);
+	p += sizeof(b);
+
+	// Write parameter end.
+	h.type = FCGI_PARAMS;
 	h.body_len = 0;
-	check(!fcgi_write_header(&ps, &h),
-		"Failed to write params end-of-stream.");
-	stream_pkg_mark_end(&ps);
+	fcgi_write_header(p, &h);
+	p += sizeof(h);
 
-	// Write STDIN eos.
-	h.type     = FCGI_STDIN;
-	h.body_len = 0;
-	check(!fcgi_write_header(&ps, &h),
-		"Failed to write stdin end-of-stream.");
-	stream_pkg_mark_end(&ps);
+	// Write stdin end.
+	h.type = FCGI_STDIN;
+	fcgi_write_header(p, &h);
+	p += sizeof(h);
 
-	bytes_sent = mk_stream_flush(&ps);
-	log_info("Sent %ld bytes on fd %d.", bytes_sent, fcgi_fd);
-	check(bytes_sent != -1, "Failed to send BEGIN_REQ.");
+	bytes_sent = mk_api->iov_send(fcgi_fd, iov);
+	check(bytes_sent == iov->total_len, "Failed to sent request.");
 
-	mk_stream_destroy(&ps);
+	mk_api->iov_free(iov);
 	return 0;
 error:
-	mk_stream_destroy(&ps);
+	if (iov) mk_api->iov_free(iov);
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	return -1;
 }
@@ -142,7 +157,8 @@ int fcgi_recv_response(int fcgi_fd,
 	iov = mk_api->iov_create(32, 0);
 
 	while (stream_rem(&ps) > 0) {
-		fcgi_read_header(&ps, &h);
+		bytes_read = fcgi_read_header(stream_ptr(&ps), &h);
+		stream_commit(&ps, bytes_read);
 
 		if (h.type == FCGI_STDOUT && h.body_len > 0) {
 			mk_api->iov_add_entry(iov,

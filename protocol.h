@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#include "stream.h"
-
 #define FCGI_MAX_LENGTH 0xffff
 #define FCGI_VERSION_1 1
 
@@ -66,19 +64,22 @@ extern const char *fcgi_role_str[];
 int
 fcgi_validate_struct_sizes(void);
 
-int
-fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h);
+size_t
+fcgi_read_header(uint8_t *p, struct fcgi_header *h);
 
-int
-fcgi_write_header(struct pkg_stream *s, const struct fcgi_header *h);
+size_t
+fcgi_write_header(uint8_t *p, const struct fcgi_header *h);
 
-int
-fcgi_write_begin_req(struct pkg_stream *s,
+size_t
+fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b);
+
+size_t
+fcgi_write_begin_req(uint8_t *p,
 		const uint16_t req_id,
 		const enum fcgi_role role,
 		const uint8_t flags);
 
 void
-fcgi_print_pkg_names(struct pkg_stream *s);
+fcgi_print_pkg_names(uint8_t *p);
 
 #endif // MK_FASTCGI_PROTOCOL

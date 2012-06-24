@@ -54,33 +54,21 @@ error:
 	return -1;
 }
 
-int
-fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h)
+size_t
+fcgi_read_header(uint8_t *p, struct fcgi_header *h)
 {
-	uint8_t *p;
-	check(stream_rem(s) >= sizeof(*h), "Not enough data on stream.");
-
-	p = stream_ptr(s);
-
 	h->version  = p[0];
 	h->type     = p[1];
 	h->req_id   = (p[2] << 8) + p[3];
 	h->body_len = (p[4] << 8) + p[5];
 	h->body_pad = p[6];
 
-	stream_commit(s, sizeof(*h));
-
-	return 0;
-error:
-	return -1;
+	return sizeof(*h);
 }
 
-int
-fcgi_write_header(struct pkg_stream *s, const struct fcgi_header *h)
+size_t
+fcgi_write_header(uint8_t *p, const struct fcgi_header *h)
 {
-	uint8_t p[8];
-	check(stream_rem(s) > sizeof(p), "Not enough space on stream.");
-
 	p[0] = h->version;
 	p[1] = h->type;
 	p[2] = (h->req_id >> 8)   & 0xff;
@@ -90,58 +78,41 @@ fcgi_write_header(struct pkg_stream *s, const struct fcgi_header *h)
 	p[6] = h->body_pad;
 	p[7] = 0;
 
-	stream_write(s, p, sizeof(p));
-
-	return 0;
-error:
-	return -1;
+	return sizeof(*h);
 }
 
-int
-fcgi_write_begin_req_body(struct pkg_stream *s,
-		const struct fcgi_begin_req_body *b)
+size_t
+fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b)
 {
-	uint8_t p[8];
-
-	check(stream_rem(s) > sizeof(p), "Not enough space on stream.");
-
 	p[0] = (b->role >> 8) & 0xff;
 	p[1] = (b->role)      & 0xff;
 	p[2] = b->flags;
 	bzero(p + 3, 5);
 
-	stream_write(s, p, sizeof(p));
-
-	return 0;
-error:
-	return -1;
+	return sizeof(*b);
 }
 
-int
-fcgi_write_begin_req(struct pkg_stream *s,
+size_t
+fcgi_write_begin_req(uint8_t *p,
 		const uint16_t req_id,
 		const enum fcgi_role role,
 		const uint8_t flags)
 {
-	struct fcgi_header h = {
-		.version  = FCGI_VERSION_1,
-		.type     = FCGI_BEGIN_REQUEST,
-		.req_id   = req_id,
-		.body_len = 8,
-		.body_pad = 0,
-	};
 	struct fcgi_begin_req_body b = {
 		.role     = role,
 		.flags    = flags,
 	};
+	struct fcgi_header h = {
+		.version  = FCGI_VERSION_1,
+		.type     = FCGI_BEGIN_REQUEST,
+		.req_id   = req_id,
+		.body_len = sizeof(b),
+		.body_pad = 0,
+	};
+	size_t bytes = 0;
 
-	check(stream_rem(s) > 16, "Not enough space on stream.");
+	bytes += fcgi_write_header(p, &h);
+	bytes += fcgi_write_begin_req_body(p, &b);
 
-	fcgi_write_header(s, &h);
-	fcgi_write_begin_req_body(s, &b);
-	stream_pkg_mark_end(s);
-
-	return 0;
-error:
-	return -1;
+	return bytes;
 }
