@@ -102,10 +102,7 @@ stream_destroy(struct pkg_stream *s)
 {
 	stream_reset(s);
 
-	if (s->fd >= 0) {
-		close(s->fd);
-		s->fd = -1;
-	}
+	s->fd = -1;
 
 	if (s->buffer) {
 		free(s->buffer);
