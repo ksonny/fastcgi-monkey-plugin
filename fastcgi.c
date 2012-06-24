@@ -14,11 +14,43 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
               VERSION,			/* version */
               MK_PLUGIN_STAGE_30);	/* hooks */
 
+static struct fcgi_server server;
+
+int fcgi_conf(char *confdir)
+{
+	unsigned long len;
+	char *conf_path = NULL;
+
+	struct mk_config_section *section;
+	struct mk_list *head;
+
+	mk_api->str_build(&conf_path, &len, "%s/fastcgi.conf", confdir);
+	server.conf = mk_api->config_create(conf_path);
+
+	mk_list_foreach(head, &server.conf->sections) {
+		section = mk_list_entry(head, struct mk_config_section, _head);
+
+		if (strcasecmp(section->name, "FASTCGI") != 0)
+			continue;
+
+		server.addr = mk_api->config_section_getval(
+			section, "ServerAddr", MK_CONFIG_VAL_STR);
+		server.port = (size_t)mk_api->config_section_getval(
+			section, "ServerPort", MK_CONFIG_VAL_NUM);
+	}
+
+	mk_api->mem_free(conf_path);
+
+	return 0;
+}
+
 int _mkp_init(struct plugin_api **api, char *confdir)
 {
 	mk_api = *api;
 
 	mk_bug(fcgi_validate_struct_sizes());
+
+	fcgi_conf(confdir);
 
 	return 0;
 }
