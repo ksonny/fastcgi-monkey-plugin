@@ -185,46 +185,65 @@ int fcgi_send_request(int fcgi_fd,
 	};
 
 	ssize_t bytes_sent;
-	struct mk_iov *iov;
-	size_t len = 3 * sizeof(h) + sizeof(b);
-	uint8_t *p = NULL;
+	struct mk_iov *iov = NULL;
+	size_t len1 = sizeof(h) + sizeof(b);
+	size_t len2 = sizeof(h);
+	size_t len3 = 2 * sizeof(h);
+	uint8_t *p1 = NULL, *p2 = NULL, *p3 = NULL;
 
-	iov = mk_api->iov_create(4, 0);
-	check_mem(iov);
+	mk_pointer env = fcgi_create_env(sr);
 
-	p = mk_api->mem_alloc(len);
-	check_mem(p);
-	mk_api->iov_add_entry(iov,
-		(char *)p,
-		len,
-		mk_iov_none,
-		MK_IOV_FREE_BUF);
+	p1 = mk_api->mem_alloc(len1);
+	check_mem(p1);
 
 	// Write begin request.
 	h.type     = FCGI_BEGIN_REQUEST;
 	h.body_len = sizeof(b);
-	fcgi_write_header(p, &h);
-	p += sizeof(h);
-	fcgi_write_begin_req_body(p, &b);
-	p += sizeof(b);
+	fcgi_write_header(p1, &h);
+	fcgi_write_begin_req_body(p1 + sizeof(h), &b);
+
+	p2 = mk_api->mem_alloc(len2);
+	check_mem(p2);
+
+	// Write parameter.
+	h.type = FCGI_PARAMS;
+	h.body_len = env.len;
+	fcgi_write_header(p2, &h);
+
+	p3 = mk_api->mem_alloc(len3);
+	check_mem(p3);
 
 	// Write parameter end.
 	h.type = FCGI_PARAMS;
 	h.body_len = 0;
-	fcgi_write_header(p, &h);
-	p += sizeof(h);
+	fcgi_write_header(p3, &h);
 
 	// Write stdin end.
 	h.type = FCGI_STDIN;
-	fcgi_write_header(p, &h);
-	p += sizeof(h);
+	h.body_len = 0;
+	fcgi_write_header(p3 + sizeof(h), &h);
+
+	iov = mk_api->iov_create(4, 0);
+	check_mem(iov);
+	mk_api->iov_add_entry(iov, (char *)p1, len1, mk_iov_none, 0);
+	mk_api->iov_add_entry(iov, (char *)p2, len2, mk_iov_none, 0);
+	mk_api->iov_add_entry(iov, env.data, env.len, mk_iov_none, 0);
+	mk_api->iov_add_entry(iov, (char *)p3, len3, mk_iov_none, 0);
 
 	bytes_sent = mk_api->iov_send(fcgi_fd, iov);
 	check(bytes_sent == iov->total_len, "Failed to sent request.");
 
+	mk_api->mem_free(p1);
+	mk_api->mem_free(p2);
+	mk_api->mem_free(p3);
+	mk_api->mem_free(env.data);
 	mk_api->iov_free(iov);
 	return 0;
 error:
+	if (p1) mk_api->mem_free(p1);
+	if (p2) mk_api->mem_free(p2);
+	if (p3) mk_api->mem_free(p3);
+	if (env.data) mk_api->mem_free(env.data);
 	if (iov) mk_api->iov_free(iov);
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	return -1;
