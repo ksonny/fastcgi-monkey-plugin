@@ -164,7 +164,7 @@ stream_flush(struct pkg_stream *s)
 
 	stream_reset(s);
 
-	return 0;
+	return ret;
 error:
 	return -1;
 }
