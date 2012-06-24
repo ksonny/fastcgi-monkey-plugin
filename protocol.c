@@ -13,8 +13,6 @@
 #include "dbg.h"
 #include "protocol.h"
 
-#define FCGI_BUFFER_SIZE 8192
-
 const char *fcgi_msg_type_str[] = {
 	[0]                      = "NULL MSG TYPE",
 	[FCGI_BEGIN_REQUEST]     = "FCGI_BEGIN_REQUEST",
