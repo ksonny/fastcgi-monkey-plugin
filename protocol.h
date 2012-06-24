@@ -60,7 +60,7 @@ extern const char *fcgi_role_str[];
 int
 fcgi_validate_struct_sizes(void);
 
-void
+int
 fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h);
 
 int

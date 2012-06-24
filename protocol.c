@@ -54,11 +54,11 @@ error:
 	return -1;
 }
 
-void
+int
 fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h)
 {
 	uint8_t *p;
-	assert(stream_rem(s) >= FCGI_HEADER_LEN);
+	check(stream_rem(s) >= sizeof(*h), "Not enough data on stream.");
 
 	p = stream_ptr(s);
 
@@ -68,17 +68,18 @@ fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h)
 	h->body_len = (p[4] << 8) + p[5];
 	h->body_pad = p[6];
 
-	stream_commit(s, FCGI_HEADER_LEN);
+	stream_commit(s, sizeof(*h));
+
+	return 0;
+error:
+	return -1;
 }
 
 int
 fcgi_write_header(struct pkg_stream *s, const struct fcgi_header *h)
 {
 	uint8_t p[8];
-
-	check(stream_rem(s) > sizeof(p),
-		"Not enough space on stream. Rem: %ld, Size: %ld",
-		stream_rem(s), sizeof(p));
+	check(stream_rem(s) > sizeof(p), "Not enough space on stream.");
 
 	p[0] = h->version;
 	p[1] = h->type;
@@ -102,7 +103,7 @@ fcgi_write_begin_req_body(struct pkg_stream *s,
 {
 	uint8_t p[8];
 
-	assert(stream_rem(s) > sizeof(p));
+	check(stream_rem(s) > sizeof(p), "Not enough space on stream.");
 
 	p[0] = (b->role >> 8) & 0xff;
 	p[1] = (b->role)      & 0xff;
@@ -112,6 +113,8 @@ fcgi_write_begin_req_body(struct pkg_stream *s,
 	stream_write(s, p, sizeof(p));
 
 	return 0;
+error:
+	return -1;
 }
 
 int
@@ -132,7 +135,7 @@ fcgi_write_begin_req(struct pkg_stream *s,
 		.flags    = flags,
 	};
 
-	check(stream_rem(s) > 16, "Buffer is not FCGI_BEGIN_REQ_LEN.");
+	check(stream_rem(s) > 16, "Not enough space on stream.");
 
 	fcgi_write_header(s, &h);
 	fcgi_write_begin_req_body(s, &b);
