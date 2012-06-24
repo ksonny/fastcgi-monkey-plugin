@@ -6,8 +6,11 @@
 #include "stream.h"
 
 #define FCGI_MAX_LENGTH 0xffff
-#define FCGI_HEADER_LEN 8
 #define FCGI_VERSION_1 1
+
+#define FCGI_HEADER_LEN 8
+#define FCGI_BEGIN_BODY_LEN 8
+#define FCGI_END_BODY_LEN 8
 
 enum fcgi_msg_type {
 	FCGI_BEGIN_REQUEST	= 1,
@@ -53,6 +56,9 @@ struct fcgi_end_req_body {
 extern const char *fcgi_msg_type_str[];
 
 extern const char *fcgi_role_str[];
+
+int
+fcgi_validate_struct_sizes(void);
 
 void
 fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h);

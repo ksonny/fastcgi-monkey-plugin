@@ -17,6 +17,9 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
 int _mkp_init(struct plugin_api **api, char *confdir)
 {
 	mk_api = *api;
+
+	mk_bug(fcgi_validate_struct_sizes());
+
 	return 0;
 }
 

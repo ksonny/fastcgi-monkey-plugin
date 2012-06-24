@@ -35,6 +35,25 @@ const char *fcgi_role_str[] = {
 	[FCGI_FILTER]     = "FCGI_FILTER",
 };
 
+int
+fcgi_validate_struct_sizes(void)
+{
+	struct fcgi_header header;
+	struct fcgi_begin_req_body begin_body;
+	struct fcgi_end_req_body end_body;
+
+	check(FCGI_HEADER_LEN == sizeof(header),
+		"sizeof(header) does not match FCGI_HEADER_LEN.");
+	check(FCGI_BEGIN_BODY_LEN == sizeof(begin_body),
+		"sizeof(begin_body) does not match FCGI_BEGIN_BODY_LEN.");
+	check(FCGI_END_BODY_LEN == sizeof(end_body),
+		"sizeof(end_body) does not match FCGI_END_BODY_LEN.");
+
+	return 0;
+error:
+	return -1;
+}
+
 void
 fcgi_read_header(struct pkg_stream *s, struct fcgi_header *h)
 {
