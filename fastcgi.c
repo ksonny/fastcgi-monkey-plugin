@@ -44,6 +44,16 @@ int fcgi_conf(char *confdir)
 	return 0;
 }
 
+int fcgi_validate_conf(void)
+{
+	check(server.addr != NULL, "No server addr configured.");
+	check(server.port != 0, "No server port configured.");
+
+	return 0;
+error:
+	return -1;
+}
+
 int _mkp_init(struct plugin_api **api, char *confdir)
 {
 	mk_api = *api;
@@ -51,6 +61,7 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 	mk_bug(fcgi_validate_struct_sizes());
 
 	fcgi_conf(confdir);
+	fcgi_validate_conf();
 
 	return 0;
 }
