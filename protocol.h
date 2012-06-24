@@ -35,19 +35,19 @@ struct fcgi_header {
 	uint16_t req_id;
 	uint16_t body_len;
 	uint8_t  body_pad;
-	// uint8_t reserved[1];
+	uint8_t reserved[1];
 };
 
 struct fcgi_begin_req_body {
 	uint16_t role;
 	uint8_t  flags;
-	// uint8_t reserved[5];
+	uint8_t reserved[5];
 };
 
 struct fcgi_end_req_body {
 	uint32_t application_status;
 	uint8_t  protocol_status;
-	// uint8_t  reserved[3];
+	uint8_t  reserved[3];
 };
 
 extern const char *fcgi_msg_type_str[];
