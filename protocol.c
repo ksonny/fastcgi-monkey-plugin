@@ -86,30 +86,6 @@ size_t fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b
 	return sizeof(*b);
 }
 
-size_t
-fcgi_write_begin_req(uint8_t *p,
-		const uint16_t req_id,
-		const enum fcgi_role role,
-		const uint8_t flags)
-{
-	struct fcgi_begin_req_body b = {
-		.role     = role,
-		.flags    = flags,
-	};
-	struct fcgi_header h = {
-		.version  = FCGI_VERSION_1,
-		.type     = FCGI_BEGIN_REQUEST,
-		.req_id   = req_id,
-		.body_len = sizeof(b),
-		.body_pad = 0,
-	};
-	size_t bytes = 0;
-
-	bytes += fcgi_write_header(p, &h);
-	bytes += fcgi_write_begin_req_body(p, &b);
-
-	return bytes;
-}
 
 size_t fcgi_param_read_length(uint8_t *p)
 {
