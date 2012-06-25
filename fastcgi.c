@@ -234,11 +234,42 @@ error:
 	return -1;
 }
 
+static const char *strnchr(const char *p, const size_t len, const char c)
+{
+	size_t i;
+	for (i = 0; i < len; i++) {
+		if (*(p + i) == c) return (p + i);
+	}
+	return '\0';
+}
+
+#define SIZEOF_CRLF 2
+#define SIZEOF_LF 1
+
+static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
+{
+	size_t cnt = 0, i;
+	const char *p = data, *q = NULL;
+
+	for (i = 0; q < (data + len); i++) {
+		q = strnchr(p, len, '\n');
+		if (!q) {
+			break;
+		}
+		cnt += (size_t)(q - p) + SIZEOF_LF;
+		if (p + SIZEOF_CRLF >= q) {
+			break;
+		}
+		p = q + SIZEOF_LF;
+	}
+	return cnt;
+}
+
 int fcgi_recv_response(int fcgi_fd,
 		struct client_session *cs,
 		struct session_request *sr)
 {
-	ssize_t bytes_read;
+	ssize_t bytes_read, headers_offset;
 	struct fcgi_header h;
 	struct pkg_stream ps;
 	struct mk_iov *iov;
@@ -272,10 +303,12 @@ int fcgi_recv_response(int fcgi_fd,
 		stream_commit(&ps, h.body_len + h.body_pad);
 	}
 
+	headers_offset = fcgi_parse_cgi_headers(iov->io[0].iov_base,
+				iov->io[0].iov_len);
 
 	mk_api->header_set_http_status(sr,  MK_HTTP_OK);
 	sr->headers.cgi = SH_CGI;
-	sr->headers.content_length = iov->total_len - 27;
+	sr->headers.content_length = iov->total_len - headers_offset;
 	mk_api->header_send(cs->socket, cs, sr);
 	mk_api->socket_sendv(cs->socket, iov);
 
