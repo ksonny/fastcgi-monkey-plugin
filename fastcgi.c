@@ -269,9 +269,7 @@ int fcgi_recv_response(int fcgi_fd,
 				mk_iov_none,
 				MK_IOV_NOT_FREE_BUF);
 		}
-		if (h.body_len > 0) {
-			stream_commit(&ps, h.body_len + h.body_pad);
-		}
+		stream_commit(&ps, h.body_len + h.body_pad);
 	}
 
 
