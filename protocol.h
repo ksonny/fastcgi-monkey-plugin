@@ -10,6 +10,9 @@
 #define FCGI_BEGIN_BODY_LEN 8
 #define FCGI_END_BODY_LEN 8
 
+#define FCGI_MSG_TYPE_STR(type) \
+	((type) < 11 ? fcgi_msg_type_str[(type)] : fcgi_msg_type_str[11])
+
 enum fcgi_msg_type {
 	FCGI_BEGIN_REQUEST	= 1,
 	FCGI_ABORT_REQUEST	= 2,
