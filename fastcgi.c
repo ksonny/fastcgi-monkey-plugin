@@ -6,13 +6,15 @@
 #define DEBUG
 
 #include "dbg.h"
-#include "mk_stream.h"
 #include "protocol.h"
+#include "chunk.h"
+#include "request.h"
 
 struct fcgi_server {
 	struct mk_config *conf;
 	char  *addr;
 	int    port;
+	struct chunk_mng cm;
 };
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
@@ -185,16 +187,22 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 {
 	mk_api = *api;
 
+	log_info("Init module.");
+
 	mk_bug(fcgi_validate_struct_sizes());
 
 	fcgi_conf(confdir);
 	fcgi_validate_conf();
+
+	chunk_mng_init(&server.cm);
 
 	return 0;
 }
 
 void _mkp_exit()
 {
+	log_info("Exit module.");
+	chunk_mng_free_chunks(&server.cm);
 }
 
 int fcgi_send_request(int fcgi_fd,
@@ -293,57 +301,87 @@ static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
 	return cnt;
 }
 
+static void fcgi_trace_header(const struct fcgi_header h)
+{
+	(void)h;
+	PLUGIN_TRACE("[HEADER] V: %1d, ID: %1d, L: %4d, P: %1d T: %s",
+		h.version,
+		h.req_id,
+		h.body_len,
+		h.body_pad,
+		fcgi_msg_type_str[h.type < FCGI_UNKNOWN_TYPE
+			? h.type : FCGI_UNKNOWN_TYPE]);
+}
+
 int fcgi_recv_response(int fcgi_fd,
 		struct client_session *cs,
 		struct session_request *sr)
 {
-	ssize_t bytes_read, headers_offset;
+	size_t headers_offset, pkg_size, inherit = 0;
+	ssize_t ret, bytes_read = 0;
+
+	struct request req;
 	struct fcgi_header h;
-	struct pkg_stream ps;
-	struct mk_iov *iov;
+	struct chunk *c;
+	struct chunk_ptr write = {0}, read = {0};
 
-	check(!mk_stream_init(&ps, fcgi_fd, 4096), "Failed to create stream.");
-
-	do {
-		bytes_read = mk_stream_refill(&ps);
-
-		check(bytes_read != -1, "Error receiving response.");
-
-		debug("Received %ld bytes on fd %i.",
-			bytes_read, fcgi_fd);
-
-	} while (bytes_read > 0);
-
-	ps.pos = 0;
-	iov = mk_api->iov_create(32, 0);
-
-	while (stream_rem(&ps) > 0) {
-		bytes_read = fcgi_read_header(stream_ptr(&ps), &h);
-		stream_commit(&ps, bytes_read);
-
-		if (h.type == FCGI_STDOUT && h.body_len > 0) {
-			mk_api->iov_add_entry(iov,
-				(char *)stream_ptr(&ps),
-				(int)h.body_len,
-				mk_iov_none,
-				MK_IOV_NOT_FREE_BUF);
-		}
-		stream_commit(&ps, h.body_len + h.body_pad);
+	request_init(&req, 32);
+	c = chunk_mng_current(&server.cm);
+	if (c) {
+		write = chunk_ptr_remain(c);
+		read  = write;
 	}
 
-	headers_offset = fcgi_parse_cgi_headers(iov->io[0].iov_base,
-				iov->io[0].iov_len);
+	do {
+		if (inherit > 0 || write.len < sizeof(h)) {
+			PLUGIN_TRACE("New chunk, inherit %ld.", inherit);
+			c = chunk_new(4096);
+			check_mem(c);
+			check(!chunk_mng_add(&server.cm, c, inherit),
+				"Failed to add chunk.");
+			write   = chunk_ptr_remain(c);
+			read    = chunk_ptr_base(c);
+			inherit = 0;
+		}
 
+		bytes_read = mk_api->socket_read(fcgi_fd, write.data, write.len);
+		check(bytes_read != -1, "Socket read error.");
+		check(!chunk_commit(c, bytes_read), "Failed to commit data.");
+		write = chunk_ptr_remain(c);
+
+		while (read.data < write.data) {
+			fcgi_read_header(read.data, &h);
+			fcgi_trace_header(h);
+
+			pkg_size = sizeof(h) + h.body_len + h.body_pad;
+			check(pkg_size < 4096, "Protect against large pkg.");
+
+			if (read.data + pkg_size > write.data) {
+				inherit = write.data - read.data;
+				break;
+			} else {
+				ret = request_add_pkg(&req, h, read);
+				check(ret > 0, "Failed to add pkg.");
+				read.data += ret;
+				read.len  -= ret;
+			}
+		}
+	} while (bytes_read > 0);
+
+	headers_offset = fcgi_parse_cgi_headers(req.iov.io[0].iov_base,
+			req.iov.io[0].iov_len);
 	mk_api->header_set_http_status(sr,  MK_HTTP_OK);
 	sr->headers.cgi = SH_CGI;
-	sr->headers.content_length = iov->total_len - headers_offset;
+	sr->headers.content_length = req.iov.total_len - headers_offset;
 	mk_api->header_send(cs->socket, cs, sr);
-	mk_api->socket_sendv(cs->socket, iov);
+	mk_api->socket_sendv(cs->socket, &req.iov);
 
-	mk_stream_destroy(&ps);
+	request_release_chunks(&req);
+	request_free(&req);
 	return 0;
 error:
-	mk_stream_destroy(&ps);
+	request_release_chunks(&req);
+	request_free(&req);
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	return -1;
 }
