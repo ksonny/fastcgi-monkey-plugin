@@ -132,18 +132,39 @@ void chunk_mng_stats(struct chunk_mng *cm)
 {
 	struct mk_list *head;
 	struct chunk *c;
-	size_t bytes_used = 0;
-	unsigned int chunks = 0;
+	size_t used;
+	size_t free;
+	size_t total_used = 0;
+	size_t total_free = 0;
+	int chunks        = 0;
+
+	log_info("# Chunk stats.");
 
 	mk_list_foreach(head, &cm->chunks._head) {
 		c = mk_list_entry(head, struct chunk, _head);
-		bytes_used += c->size + offsetof(struct chunk, data);
+		used = c->pos;
+		free = c->size - used;
+
+		log_info("Chunk: %d, S: %ld B, U: %ld B, F: %ld B, R: %d",
+			chunks,
+			c->size,
+			used,
+			free,
+			c->refs);
+
+		total_used += used;
+		total_free += free;
 		chunks++;
 	}
 
-	log_info("%ld bytes used by %d chunks.",
-		bytes_used,
-		chunks);
+	log_info("Total");
+	log_info("Count: %d, Size: %ld B, Used: %ld B, Free: %ld B",
+		chunks,
+		total_used + total_free,
+		total_used,
+		total_free);
+
+	log_info("# Chunk stats.");
 }
 
 void chunk_mng_free_chunks(struct chunk_mng *cm)
