@@ -30,12 +30,6 @@ enum fcgi_role {
 	FCGI_FILTER     = 3,
 };
 
-struct fcgi_server {
-	struct mk_config *conf;
-	char  *addr;
-	int    port;
-};
-
 struct fcgi_header {
 	uint8_t  version;
 	uint8_t  type;

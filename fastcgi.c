@@ -9,6 +9,12 @@
 #include "mk_stream.h"
 #include "protocol.h"
 
+struct fcgi_server {
+	struct mk_config *conf;
+	char  *addr;
+	int    port;
+};
+
 MONKEY_PLUGIN("fastcgi",		/* shortname */
               "FastCGI client",		/* name */
               VERSION,			/* version */
