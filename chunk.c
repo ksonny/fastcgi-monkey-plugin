@@ -24,7 +24,7 @@ error:
 
 int chunk_commit(struct chunk *c, size_t bytes)
 {
-	check(c->size - c->pos > bytes, "Commited more bytes then available.");
+	check(c->size - c->pos >= bytes, "Commited more bytes then available.");
 
 	c->pos += bytes;
 	return 0;
