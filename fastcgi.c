@@ -351,6 +351,7 @@ error:
 int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		struct session_request *sr)
 {
+	(void)plugin;
 	char *url = NULL;
 	int fcgi_fd = -1;
 
