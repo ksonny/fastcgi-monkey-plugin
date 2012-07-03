@@ -14,6 +14,7 @@ struct chunk *chunk_new(size_t size)
 
 	mk_list_init(&tmp->_head);
 	tmp->pos  = 0;
+	tmp->refs = 0;
 	tmp->size = CHUNK_SIZE(size);
 
 	return tmp;
