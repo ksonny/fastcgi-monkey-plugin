@@ -83,10 +83,9 @@ int chunk_release(struct chunk *c)
 	}
 }
 
-int chunk_mng_init(struct chunk_mng *cm)
+void chunk_mng_init(struct chunk_mng *cm)
 {
 	mk_list_init(&cm->chunks._head);
-	return 0;
 }
 
 struct chunk *chunk_mng_current(struct chunk_mng *cm)

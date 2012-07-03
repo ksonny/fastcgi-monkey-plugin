@@ -43,7 +43,7 @@ void chunk_retain(struct chunk *c);
 int chunk_release(struct chunk *c);
 
 
-int chunk_mng_init(struct chunk_mng *cm);
+void chunk_mng_init(struct chunk_mng *cm);
 
 struct chunk *chunk_mng_current(struct chunk_mng *cm);
 
