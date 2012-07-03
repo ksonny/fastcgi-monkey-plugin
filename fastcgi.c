@@ -250,7 +250,7 @@ int fcgi_send_request(int fcgi_fd,
 	mk_api->iov_add_entry(iov, (char *)p3, len3, mk_iov_none, 0);
 
 	bytes_sent = mk_api->iov_send(fcgi_fd, iov);
-	check(bytes_sent == iov->total_len, "Failed to sent request.");
+	check(bytes_sent == (ssize_t)iov->total_len, "Failed to sent request.");
 
 	mk_api->mem_free(env.data);
 	mk_api->iov_free(iov);
