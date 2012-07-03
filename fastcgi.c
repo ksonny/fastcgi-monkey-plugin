@@ -198,7 +198,6 @@ void _mkp_exit()
 }
 
 int fcgi_send_request(int fcgi_fd,
-		struct client_session *cs,
 		struct session_request *sr)
 {
 	struct fcgi_begin_req_body b = {
@@ -369,7 +368,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		"Could not connect to %s:%i.", server.addr, server.port);
 	mk_api->socket_cork_flag(fcgi_fd, MK_FALSE);
 
-	check(!fcgi_send_request(fcgi_fd, cs, sr),
+	check(!fcgi_send_request(fcgi_fd, sr),
 		"Failed to send request");
 	check(!fcgi_recv_response(fcgi_fd, cs, sr),
 		"Failed to received response.");
