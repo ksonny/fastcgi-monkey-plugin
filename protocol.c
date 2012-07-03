@@ -77,6 +77,15 @@ size_t fcgi_write_header(uint8_t *p, const struct fcgi_header *h)
 	return sizeof(*h);
 }
 
+size_t fcgi_read_end_req_body(uint8_t *p, struct fcgi_end_req_body *b)
+{
+	b->application_status  = (p[0] << 24) + (p[1] << 16);
+	b->application_status += (p[2] << 8)  + p[3];
+	b->protocol_status     = p[4];
+
+	return sizeof(*b);
+}
+
 size_t fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b)
 {
 	p[0] = (b->role >> 8) & 0xff;

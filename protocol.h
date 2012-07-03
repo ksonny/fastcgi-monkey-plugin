@@ -68,6 +68,9 @@ size_t
 fcgi_write_header(uint8_t *p, const struct fcgi_header *h);
 
 size_t
+fcgi_read_end_req_body(uint8_t *p, struct fcgi_end_req_body *b);
+
+size_t
 fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b);
 
 size_t
