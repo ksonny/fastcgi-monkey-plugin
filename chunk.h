@@ -34,6 +34,8 @@ struct chunk_ptr chunk_ptr_remain(struct chunk *c);
 
 struct chunk_ptr chunk_ptr_stored(struct chunk *c);
 
+struct chunk_ptr chunk_ptr_base(struct chunk *c);
+
 void chunk_free(struct chunk *c);
 
 void chunk_retain(struct chunk *c);

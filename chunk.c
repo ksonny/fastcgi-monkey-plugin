@@ -50,6 +50,15 @@ struct chunk_ptr chunk_ptr_stored(struct chunk *c)
 	};
 }
 
+struct chunk_ptr chunk_ptr_base(struct chunk *c)
+{
+	return (struct chunk_ptr){
+		.parent = c,
+		.len    = c->size,
+		.data   = c->data,
+	};
+}
+
 void chunk_free(struct chunk *c)
 {
 	mk_list_del(&c->_head);
