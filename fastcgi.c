@@ -375,10 +375,10 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	mk_api->socket_close(fcgi_fd);
 
-	sr->close_now = MK_TRUE;
-
 	return MK_PLUGIN_RET_END;
 error:
+	if (fcgi_fd != -1) mk_api->socket_close(fcgi_fd);
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
+	sr->close_now = MK_TRUE;
 	return MK_PLUGIN_RET_CLOSE_CONX;
 }
