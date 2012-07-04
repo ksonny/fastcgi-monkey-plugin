@@ -33,6 +33,13 @@ enum fcgi_role {
 	FCGI_FILTER     = 3,
 };
 
+enum fcgi_protocol_status {
+	FCGI_REQUEST_COMPLETE = 0,
+	FCGI_CANT_MPX_CONN    = 1,
+	FCGI_OVERLOADED       = 2,
+	FCGI_UNKNOWN_ROLE     = 3,
+};
+
 struct fcgi_header {
 	uint8_t  version;
 	uint8_t  type;
@@ -49,7 +56,7 @@ struct fcgi_begin_req_body {
 };
 
 struct fcgi_end_req_body {
-	uint32_t application_status;
+	uint32_t app_status;
 	uint8_t  protocol_status;
 	uint8_t  reserved[3];
 };
