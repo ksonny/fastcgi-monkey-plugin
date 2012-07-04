@@ -38,6 +38,17 @@ error:
 	return -1;
 }
 
+int request_validate(struct request *req)
+{
+	if (req->flags & REQUEST_ENDED) {
+		check(req->flags & STDOUT_CLOSED, "Stream stdout not closed.");
+		check(req->flags & STDERR_CLOSED, "Stream stderr not closed.");
+	}
+	return 0;
+error:
+	return -1;
+}
+
 ssize_t request_add_pkg(struct request *req,
 		struct fcgi_header h,
 		struct chunk_ptr cp)
