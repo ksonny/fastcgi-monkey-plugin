@@ -317,8 +317,8 @@ int fcgi_recv_response(int fcgi_fd,
 		struct client_session *cs,
 		struct session_request *sr)
 {
-	size_t headers_offset, pkg_size, inherit = 0;
-	ssize_t ret, bytes_read;
+	size_t headers_offset, bytes_read, pkg_size, inherit = 0;
+	ssize_t ret;
 
 	struct request req;
 	struct fcgi_header h;
@@ -344,8 +344,10 @@ int fcgi_recv_response(int fcgi_fd,
 			inherit = 0;
 		}
 
-		bytes_read = mk_api->socket_read(fcgi_fd, write.data, write.len);
-		check(bytes_read != -1, "Socket read error.");
+		ret = mk_api->socket_read(fcgi_fd, write.data, write.len);
+		check(ret != -1, "Socket read error.");
+
+		bytes_read = ret;
 		check(!chunk_commit(c, bytes_read), "Failed to commit data.");
 		write = chunk_remain(c);
 
