@@ -8,9 +8,10 @@
 #define MAX_PACKAGES 32
 
 enum request_flags {
-	HEADERS_SENT  = 1,
-	STDOUT_CLOSED = 2,
-	STDERR_CLOSED = 4,
+	REQUEST_ENDED = 1,
+	HEADERS_SENT  = 2,
+	STDOUT_CLOSED = 4,
+	STDERR_CLOSED = 8,
 };
 
 struct request {
