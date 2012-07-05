@@ -30,11 +30,11 @@ struct chunk *chunk_new(size_t size);
 
 int chunk_commit(struct chunk *c, size_t bytes);
 
-struct chunk_ptr chunk_ptr_remain(struct chunk *c);
+struct chunk_ptr chunk_remain(struct chunk *c);
 
-struct chunk_ptr chunk_ptr_stored(struct chunk *c);
+struct chunk_ptr chunk_stored(struct chunk *c);
 
-struct chunk_ptr chunk_ptr_base(struct chunk *c);
+struct chunk_ptr chunk_base(struct chunk *c);
 
 void chunk_free(struct chunk *c);
 

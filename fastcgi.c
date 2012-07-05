@@ -327,8 +327,8 @@ int fcgi_recv_response(int fcgi_fd,
 
 	request_init(&req, 32);
 	c = chunk_mng_current(&server.cm);
-	if (c) {
-		write = chunk_ptr_remain(c);
+	if (c != NULL) {
+		write = chunk_remain(c);
 		read  = write;
 	}
 
@@ -339,15 +339,15 @@ int fcgi_recv_response(int fcgi_fd,
 			check_mem(c);
 			check(!chunk_mng_add(&server.cm, c, inherit),
 				"Failed to add chunk.");
-			write   = chunk_ptr_remain(c);
-			read    = chunk_ptr_base(c);
+			write   = chunk_remain(c);
+			read    = chunk_base(c);
 			inherit = 0;
 		}
 
 		bytes_read = mk_api->socket_read(fcgi_fd, write.data, write.len);
 		check(bytes_read != -1, "Socket read error.");
 		check(!chunk_commit(c, bytes_read), "Failed to commit data.");
-		write = chunk_ptr_remain(c);
+		write = chunk_remain(c);
 
 		while (read.data < write.data) {
 			fcgi_read_header(read.data, &h);

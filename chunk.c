@@ -32,7 +32,7 @@ error:
 	return -1;
 }
 
-struct chunk_ptr chunk_ptr_remain(struct chunk *c)
+struct chunk_ptr chunk_remain(struct chunk *c)
 {
 	return (struct chunk_ptr){
 		.parent = c,
@@ -41,7 +41,7 @@ struct chunk_ptr chunk_ptr_remain(struct chunk *c)
 	};
 }
 
-struct chunk_ptr chunk_ptr_stored(struct chunk *c)
+struct chunk_ptr chunk_stored(struct chunk *c)
 {
 	return (struct chunk_ptr){
 		.parent = c,
@@ -50,7 +50,7 @@ struct chunk_ptr chunk_ptr_stored(struct chunk *c)
 	};
 }
 
-struct chunk_ptr chunk_ptr_base(struct chunk *c)
+struct chunk_ptr chunk_base(struct chunk *c)
 {
 	return (struct chunk_ptr){
 		.parent = c,
@@ -109,8 +109,8 @@ int chunk_mng_add(struct chunk_mng *cm, struct chunk *c, size_t inherit)
 	ssize_t begin;
 
 	if (t && inherit > 0) {
-		p = chunk_ptr_remain(c);
-		q = chunk_ptr_stored(t);
+		p = chunk_remain(c);
+		q = chunk_stored(t);
 
 		begin = q.len - inherit;
 
