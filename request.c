@@ -38,7 +38,7 @@ error:
 	return -1;
 }
 
-int request_validate(struct request *req)
+int request_validate(const struct request *req)
 {
 	if (req->flags & REQUEST_ENDED) {
 		check(req->flags & STDOUT_CLOSED, "Stream stdout not closed.");
