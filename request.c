@@ -6,6 +6,7 @@
 int request_init(struct request *preq, size_t iov_n)
 {
 	struct request req = {
+		.state = NEW,
 		.fd    = -1,
 		.flags = 0,
 		.cs    = NULL,
@@ -40,13 +41,8 @@ error:
 
 int request_validate(const struct request *req)
 {
-	if (req->flags & REQUEST_ENDED) {
-		check(req->flags & STDOUT_CLOSED, "Stream stdout not closed.");
-		check(req->flags & STDERR_CLOSED, "Stream stderr not closed.");
-	}
+	(void)req;
 	return 0;
-error:
-	return -1;
 }
 
 ssize_t request_add_pkg(struct request *req,
@@ -62,15 +58,14 @@ ssize_t request_add_pkg(struct request *req,
 	switch (h.type) {
 	case FCGI_STDERR:
 		if (h.body_len == 0) {
-			req->flags |= STDERR_CLOSED;
 		} else {
-			req->flags &= ~STDERR_CLOSED;
 		}
 		break;
 
 	case FCGI_STDOUT:
+		check(req->state == REQUEST_SENT, "Request not yet sent.");
 		if (h.body_len == 0) {
-			req->flags |= STDOUT_CLOSED;
+			req->state = STREAM_CLOSED;
 			break;
 		}
 
@@ -85,6 +80,7 @@ ssize_t request_add_pkg(struct request *req,
 		break;
 
 	case FCGI_END_REQUEST:
+		check(req->state == STREAM_CLOSED, "Stream not yet closed.");
 		fcgi_read_end_req_body(cp.data + sizeof(h), &b);
 
 		switch (b.app_status) {
@@ -109,7 +105,7 @@ ssize_t request_add_pkg(struct request *req,
 			break;
 		}
 
-		req->flags |= REQUEST_ENDED;
+		req->state = REQUEST_ENDED;
 		break;
 
 	default:

@@ -326,6 +326,8 @@ int fcgi_recv_response(int fcgi_fd,
 	struct chunk_ptr write = {0}, read = {0};
 
 	request_init(&req, 32);
+	req.state = REQUEST_SENT;
+
 	c = chunk_mng_current(&server.cm);
 	if (c != NULL) {
 		write = chunk_remain(c);
@@ -368,6 +370,8 @@ int fcgi_recv_response(int fcgi_fd,
 			read.len  -= ret;
 		}
 	} while (bytes_read > 0);
+
+	check(req.state == REQUEST_ENDED, "Request not yet ended.");
 
 	headers_offset = fcgi_parse_cgi_headers(req.iov.io[0].iov_base,
 			req.iov.io[0].iov_len);

@@ -7,16 +7,22 @@
 
 #define MAX_PACKAGES 32
 
+enum request_state {
+	NEW,
+	REQUEST_SENT,
+	STREAM_CLOSED,
+	REQUEST_ENDED,
+};
+
 enum request_flags {
-	REQUEST_ENDED = 1,
-	HEADERS_SENT  = 2,
-	STDOUT_CLOSED = 4,
-	STDERR_CLOSED = 8,
+	HEADERS_SENT = 1,
+	CHUNKED_CONX = 2,
 };
 
 struct request {
-	int fd;
+	enum request_state state;
 	uint32_t flags;
+	int fd;
 	struct chunk **cs;
 	struct mk_iov iov;
 };
