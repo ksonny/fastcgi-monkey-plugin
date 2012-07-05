@@ -383,7 +383,6 @@ int fcgi_recv_response(int fcgi_fd,
 error:
 	request_release_chunks(&req);
 	request_free(&req);
-	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	return -1;
 }
 
