@@ -54,18 +54,68 @@ ssize_t request_add_pkg(struct request *req,
 		struct chunk_ptr cp)
 {
 	size_t pkg_length;
+	struct fcgi_end_req_body b;
 
 	pkg_length = sizeof(h) + h.body_len + h.body_pad;
 	check(cp.len >= pkg_length, "Missing package data.");
 
-	chunk_retain(cp.parent);
-	req->cs[req->iov.iov_idx] = cp.parent;
+	switch (h.type) {
+	case FCGI_STDERR:
+		if (h.body_len == 0) {
+			req->flags |= STDERR_CLOSED;
+		} else {
+			req->flags &= ~STDERR_CLOSED;
+		}
+		break;
 
-	mk_api->iov_add_entry(&req->iov,
-			(char *)cp.data + sizeof(h),
-			h.body_len,
-			mk_iov_none,
-			0);
+	case FCGI_STDOUT:
+		if (h.body_len == 0) {
+			req->flags |= STDOUT_CLOSED;
+			break;
+		}
+
+		chunk_retain(cp.parent);
+		req->cs[req->iov.iov_idx] = cp.parent;
+
+		mk_api->iov_add_entry(&req->iov,
+				(char *)cp.data + sizeof(h),
+				h.body_len,
+				mk_iov_none,
+				0);
+		break;
+
+	case FCGI_END_REQUEST:
+		fcgi_read_end_req_body(cp.data + sizeof(h), &b);
+
+		switch (b.app_status) {
+		case EXIT_SUCCESS:
+			break;
+		case EXIT_FAILURE:
+			break;
+		default:
+			break;
+		}
+
+		switch (b.protocol_status) {
+		case FCGI_REQUEST_COMPLETE:
+			break;
+		case FCGI_CANT_MPX_CONN:
+			break;
+		case FCGI_OVERLOADED:
+			break;
+		case FCGI_UNKNOWN_ROLE:
+			break;
+		default:
+			break;
+		}
+
+		req->flags |= REQUEST_ENDED;
+		break;
+
+	default:
+		log_info("Ignore package: %s",
+			FCGI_MSG_TYPE_STR(h.type));
+	}
 
 	return pkg_length;
 error:
