@@ -97,22 +97,31 @@ error:
 	return NULL;
 }
 
-/* Possibly move last package? */
+/*
+ * Adds chunk c to chunk manager and mark as current chunk.
+ * If inherit > 0 then copy the last inherit bytes commited to old
+ * current.
+ */
 int chunk_mng_add(struct chunk_mng *cm, struct chunk *c, size_t inherit)
 {
 	struct chunk *t = chunk_mng_current(cm);
 	struct chunk_ptr p, q;
+	ssize_t begin;
 
-	if (t) {
+	if (t && inherit > 0) {
 		p = chunk_ptr_remain(c);
 		q = chunk_ptr_stored(t);
 
-		check(p.len >= inherit, "Not enough free space to inherit.");
-		check(q.len >= inherit, "Not enough used space to inherit.");
+		begin = q.len - inherit;
 
-		memcpy(p.data, q.data, inherit);
+		check(p.len >= inherit, "Not enough free mem to inherit.");
+		check(begin > 0,        "Not enough used mem to inherit.");
+
+		memcpy(p.data, q.data + begin, inherit);
 		chunk_commit(c, inherit);
+	}
 
+	if (t) {
 		chunk_release(t);
 	} else {
 		check(inherit == 0, "No chunks to inherit from.");
