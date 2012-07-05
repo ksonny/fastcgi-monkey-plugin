@@ -318,7 +318,7 @@ int fcgi_recv_response(int fcgi_fd,
 		struct session_request *sr)
 {
 	size_t headers_offset, pkg_size, inherit = 0;
-	ssize_t ret, bytes_read = 0;
+	ssize_t ret, bytes_read;
 
 	struct request req;
 	struct fcgi_header h;
@@ -354,17 +354,16 @@ int fcgi_recv_response(int fcgi_fd,
 			fcgi_trace_header(h);
 
 			pkg_size = sizeof(h) + h.body_len + h.body_pad;
-			check(pkg_size < 4096, "Protect against large pkg.");
 
 			if (read.data + pkg_size > write.data) {
 				inherit = write.data - read.data;
-				break;
+				ret     = inherit;
 			} else {
 				ret = request_add_pkg(&req, h, read);
 				check(ret > 0, "Failed to add pkg.");
-				read.data += ret;
-				read.len  -= ret;
 			}
+			read.data += ret;
+			read.len  -= ret;
 		}
 	} while (bytes_read > 0);
 
