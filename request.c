@@ -39,6 +39,18 @@ error:
 	return -1;
 }
 
+int request_assign(struct request *req, int fd)
+{
+	check(req->state == AVAILABLE,
+		"Request state is not AVAILABLE.");
+
+	req->state = ASSIGNED;
+	req->fd    = fd;
+	return 0;
+error:
+	return -1;
+}
+
 int request_validate(const struct request *req)
 {
 	(void)req;
