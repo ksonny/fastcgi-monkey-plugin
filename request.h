@@ -56,6 +56,8 @@ struct request *request_list_get_assigned(struct request_list *rl);
 
 struct request *request_list_get(struct request_list *rl, uint16_t req_id);
 
+int request_list_index_of(struct request_list *rl, struct request *r);
+
 void request_list_free(struct request_list *rl);
 
 #endif // __FCGI_REQUEST__

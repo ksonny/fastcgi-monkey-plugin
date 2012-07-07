@@ -19,17 +19,22 @@ int request_init(struct request *preq, size_t iov_n)
 			.io          = NULL,
 		},
 	};
-	struct chunk **cs = NULL;
-	struct iovec *io  = NULL;
-
+	struct chunk **cs  = NULL;
+	struct iovec *io   = NULL;
+	char **buf_to_free = NULL;
+  
 	io = mk_api->mem_alloc(iov_n * sizeof(*io));
 	check_mem(io);
 
 	cs = mk_api->mem_alloc(iov_n * sizeof(*cs));
 	check_mem(cs);
 
-	req.cs     = cs;
-	req.iov.io = io;
+	buf_to_free = mk_api->mem_alloc(iov_n * sizeof(*buf_to_free));
+	check_mem(buf_to_free);
+
+	req.cs              = cs;
+	req.iov.io          = io;
+	req.iov.buf_to_free = buf_to_free;
 
 	memcpy(preq, &req, sizeof(req));
 	return 0;
@@ -229,6 +234,18 @@ struct request *request_list_get(struct request_list *rl, uint16_t req_id)
 	return rl->rs + req_id;
 error:
 	return NULL;
+}
+
+int request_list_index_of(struct request_list *rl, struct request *r)
+{
+	ptrdiff_t offset = r - rl->rs;
+
+	check(r >= rl->rs && r <= rl->rs + rl->n, "Request not part of list.");
+
+	return offset;
+error:
+	return -1;
+
 }
 
 void request_list_free(struct request_list *rl)
