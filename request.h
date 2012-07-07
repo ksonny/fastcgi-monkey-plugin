@@ -24,6 +24,7 @@ struct request {
 	enum request_state state;
 	uint32_t flags;
 	int fd;
+	struct session_request *sr;
 	struct chunk **cs;
 	struct mk_iov iov;
 };
