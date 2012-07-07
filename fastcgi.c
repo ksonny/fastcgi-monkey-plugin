@@ -24,6 +24,16 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
 
 static struct fcgi_server server;
 
+static int fcgi_validate_conf(void)
+{
+	check(server.addr != NULL, "No server addr configured.");
+	check(server.port != 0, "No server port configured.");
+
+	return 0;
+error:
+	return -1;
+}
+
 int fcgi_conf(char *confdir)
 {
 	unsigned long len;
@@ -49,18 +59,9 @@ int fcgi_conf(char *confdir)
 
 	mk_api->mem_free(conf_path);
 
-	return 0;
+	return fcgi_validate_conf();
 }
 
-int fcgi_validate_conf(void)
-{
-	check(server.addr != NULL, "No server addr configured.");
-	check(server.port != 0, "No server port configured.");
-
-	return 0;
-error:
-	return -1;
-}
 
 #define __write_param(env, len, pos, key, value) do { \
 		check(len - pos > fcgi_param_write(NULL, key, value), \
@@ -187,16 +188,18 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 {
 	mk_api = *api;
 
-	log_info("Init module.");
-
-	mk_bug(fcgi_validate_struct_sizes());
-
-	fcgi_conf(confdir);
-	fcgi_validate_conf();
+	check(!fcgi_validate_struct_sizes(),
+		"Validating struct sizes failed.");
+	check(!fcgi_conf(confdir),
+		"Failed to read config.");
+	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
+		"Failed to init request list.");
 
 	chunk_mng_init(&server.cm);
 
 	return 0;
+error:
+	return -1;
 }
 
 void _mkp_exit()
