@@ -153,13 +153,23 @@ error:
 
 void request_release_chunks(struct request *req)
 {
-	struct chunk *c;
-	ssize_t i;
+	int i;
 
 	for (i = 0; i < req->iov.iov_idx; i++) {
-		c = req->cs[i];
-		chunk_release(c);
+		if (req->cs[i]) {
+			chunk_release(req->cs[i]);
+			req->cs[i] = NULL;
+		}
 	}
+	for (i = 0; i < req->iov.buf_idx; i++) {
+		if (req->iov.buf_to_free[i]) {
+			mk_api->mem_free(req->iov.buf_to_free[i]);
+			req->iov.buf_to_free[i] = NULL;
+		}
+	}
+	req->iov.iov_idx   = 0;
+	req->iov.buf_idx   = 0;
+	req->iov.total_len = 0;
 }
 
 void request_free(struct request *req)
