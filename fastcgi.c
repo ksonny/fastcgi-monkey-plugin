@@ -14,7 +14,7 @@ struct fcgi_server {
 	struct mk_config *conf;
 	char  *addr;
 	int    port;
-	struct chunk_mng cm;
+	struct chunk_list cm;
 	struct request_list rl;
 };
 
@@ -196,7 +196,7 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
 		"Failed to init request list.");
 
-	chunk_mng_init(&server.cm);
+	chunk_list_init(&server.cm);
 
 	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
 		"Failed to init request list.");
@@ -209,7 +209,7 @@ error:
 void _mkp_exit()
 {
 	log_info("Exit module.");
-	chunk_mng_free_chunks(&server.cm);
+	chunk_list_free_chunks(&server.cm);
 	request_list_free(&server.rl);
 }
 
@@ -336,7 +336,7 @@ int fcgi_recv_response(int fcgi_fd,
 	request_init(&req, 32);
 	req.state = REQUEST_SENT;
 
-	c = chunk_mng_current(&server.cm);
+	c = chunk_list_current(&server.cm);
 	if (c != NULL) {
 		write = chunk_remain(c);
 		read  = write;
@@ -347,7 +347,7 @@ int fcgi_recv_response(int fcgi_fd,
 			PLUGIN_TRACE("New chunk, inherit %ld.", inherit);
 			c = chunk_new(4096);
 			check_mem(c);
-			check(!chunk_mng_add(&server.cm, c, inherit),
+			check(!chunk_list_add(&server.cm, c, inherit),
 				"Failed to add chunk.");
 			write   = chunk_remain(c);
 			read    = chunk_base(c);

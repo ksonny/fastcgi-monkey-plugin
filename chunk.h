@@ -22,7 +22,7 @@ struct chunk_ptr {
 	uint8_t *data;
 };
 
-struct chunk_mng {
+struct chunk_list {
 	struct chunk chunks;
 };
 
@@ -43,14 +43,14 @@ void chunk_retain(struct chunk *c);
 int chunk_release(struct chunk *c);
 
 
-void chunk_mng_init(struct chunk_mng *cm);
+void chunk_list_init(struct chunk_list *cm);
 
-struct chunk *chunk_mng_current(struct chunk_mng *cm);
+struct chunk *chunk_list_current(struct chunk_list *cm);
 
-int chunk_mng_add(struct chunk_mng *cm, struct chunk *c, size_t inherit);
+int chunk_list_add(struct chunk_list *cm, struct chunk *c, size_t inherit);
 
-void chunk_mng_stats(struct chunk_mng *cm);
+void chunk_list_stats(struct chunk_list *cm);
 
-void chunk_mng_free_chunks(struct chunk_mng *cm);
+void chunk_list_free_chunks(struct chunk_list *cm);
 
 #endif // __MK_CHUNK__

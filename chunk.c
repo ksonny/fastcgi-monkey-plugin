@@ -83,12 +83,12 @@ int chunk_release(struct chunk *c)
 	}
 }
 
-void chunk_mng_init(struct chunk_mng *cm)
+void chunk_list_init(struct chunk_list *cm)
 {
 	mk_list_init(&cm->chunks._head);
 }
 
-struct chunk *chunk_mng_current(struct chunk_mng *cm)
+struct chunk *chunk_list_current(struct chunk_list *cm)
 {
 	check_debug(mk_list_is_empty(&cm->chunks._head), "No managed chunks.");
 
@@ -102,9 +102,9 @@ error:
  * If inherit > 0 then copy the last inherit bytes commited to old
  * current.
  */
-int chunk_mng_add(struct chunk_mng *cm, struct chunk *c, size_t inherit)
+int chunk_list_add(struct chunk_list *cm, struct chunk *c, size_t inherit)
 {
-	struct chunk *t = chunk_mng_current(cm);
+	struct chunk *t = chunk_list_current(cm);
 	struct chunk_ptr p, q;
 	ssize_t begin;
 
@@ -137,7 +137,7 @@ error:
 	return -1;
 }
 
-void chunk_mng_stats(struct chunk_mng *cm)
+void chunk_list_stats(struct chunk_list *cm)
 {
 	struct mk_list *head;
 	struct chunk *c;
@@ -176,7 +176,7 @@ void chunk_mng_stats(struct chunk_mng *cm)
 	log_info("# Chunk stats.");
 }
 
-void chunk_mng_free_chunks(struct chunk_mng *cm)
+void chunk_list_free_chunks(struct chunk_list *cm)
 {
 	struct mk_list *head, *tmp;
 	struct chunk *c;
