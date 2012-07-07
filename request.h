@@ -24,6 +24,7 @@ struct request {
 	enum request_state state;
 	uint32_t flags;
 	int fd;
+	struct client_session *ccs;
 	struct session_request *sr;
 	struct chunk **cs;
 	struct mk_iov iov;
@@ -36,7 +37,9 @@ struct request_list {
 
 int request_init(struct request *req, size_t iov_size);
 
-int request_assign(struct request *req, int fd);
+int request_assign(struct request *req,
+	struct client_session *cs,
+	struct session_request *sr);
 
 int request_make_available(struct request *req);
 

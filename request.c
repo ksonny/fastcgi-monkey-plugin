@@ -54,13 +54,17 @@ static void request_reset(struct request *req)
 	req->iov.total_len = 0;
 }
 
-int request_assign(struct request *req, int fd)
+int request_assign(struct request *req,
+	struct client_session *cs,
+	struct session_request *sr)
 {
 	check(req->state == AVAILABLE,
 		"Request state is not AVAILABLE.");
 
 	req->state = ASSIGNED;
-	req->fd    = fd;
+	req->fd    = cs->socket;
+	req->ccs   = cs;
+	req->sr    = sr;
 	return 0;
 error:
 	return -1;
