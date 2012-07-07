@@ -168,3 +168,75 @@ void request_free(struct request *req)
 	}
 }
 
+int request_list_init(struct request_list *rl, int n)
+{
+	struct request *tmp = NULL;
+	int i;
+
+	tmp = mk_api->mem_alloc(n * sizeof(*tmp));
+	check_mem(tmp);
+
+	for (i = 0; i < n; i++) {
+		check(!request_init(tmp + i, 4),
+			"Failed to init request %d", i);
+	}
+
+	rl->n  = n;
+	rl->rs = tmp;
+
+	return 0;
+error:
+	if (tmp && i > 0) {
+		n = i;
+		for (i = 0; i < n; i++) {
+			request_free(tmp + i);
+		}
+	}
+	if (tmp) mk_api->mem_free(tmp);
+	return -1;
+}
+
+static struct request *request_list_get_by_state(struct request_list *rl,
+		enum request_state state)
+{
+	int i;
+	struct request *r = NULL;
+
+	for (i = 0; i < rl->n; i++) {
+		r = rl->rs + i;
+		if (r->state == state)
+			return r;
+	}
+	return NULL;
+}
+
+struct request *request_list_get_available(struct request_list *rl)
+{
+	return request_list_get_by_state(rl, AVAILABLE);
+}
+
+struct request *request_list_get_assigned(struct request_list *rl)
+{
+	return request_list_get_by_state(rl, ASSIGNED);
+}
+
+struct request *request_list_get(struct request_list *rl, uint16_t req_id)
+{
+	check(req_id < rl->n, "Request id out of range.");
+
+	return rl->rs + req_id;
+error:
+	return NULL;
+}
+
+void request_list_free(struct request_list *rl)
+{
+	int i;
+
+	for (i = 0; i < rl->n; i++) {
+		request_free(rl->rs + i);
+	}
+	mk_api->mem_free(rl->rs);
+	rl->n  = 0;
+	rl->rs = NULL;
+}

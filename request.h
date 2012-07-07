@@ -28,6 +28,11 @@ struct request {
 	struct mk_iov iov;
 };
 
+struct request_list {
+	int n;
+	struct request *rs;
+};
+
 int request_init(struct request *req, size_t iov_size);
 
 int request_assign(struct request *req, int fd);
@@ -43,5 +48,16 @@ void request_release_chunks(struct request *req);
 void request_reset(struct request *req);
 
 void request_free(struct request *req);
+
+
+int request_list_init(struct request_list *rl, int n);
+
+struct request *request_list_get_available(struct request_list *rl);
+
+struct request *request_list_get_assigned(struct request_list *rl);
+
+struct request *request_list_get(struct request_list *rl, uint16_t req_id);
+
+void request_list_free(struct request_list *rl);
 
 #endif // __FCGI_REQUEST__
