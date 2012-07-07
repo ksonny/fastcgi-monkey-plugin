@@ -15,6 +15,7 @@ struct fcgi_server {
 	char  *addr;
 	int    port;
 	struct chunk_mng cm;
+	struct request_list rl;
 };
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
@@ -197,6 +198,9 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 
 	chunk_mng_init(&server.cm);
 
+	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
+		"Failed to init request list.");
+
 	return 0;
 error:
 	return -1;
@@ -206,6 +210,7 @@ void _mkp_exit()
 {
 	log_info("Exit module.");
 	chunk_mng_free_chunks(&server.cm);
+	request_list_free(&server.rl);
 }
 
 int fcgi_send_request(int fcgi_fd,
