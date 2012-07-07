@@ -32,6 +32,8 @@ int request_init(struct request *req, size_t iov_size);
 
 int request_assign(struct request *req, int fd);
 
+int request_make_available(struct request *req);
+
 ssize_t request_add_pkg(struct request *req,
 		struct fcgi_header h,
 		struct chunk_ptr cp);

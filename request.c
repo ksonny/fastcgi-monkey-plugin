@@ -51,6 +51,17 @@ error:
 	return -1;
 }
 
+int request_make_available(struct request *req)
+{
+	check(req->state == REQUEST_ENDED,
+		"Request state is not REQUEST_ENDED");
+
+	request_reset(req);
+	return 0;
+error:
+	return -1;
+}
+
 ssize_t request_add_pkg(struct request *req,
 		struct fcgi_header h,
 		struct chunk_ptr cp)
