@@ -51,12 +51,6 @@ error:
 	return -1;
 }
 
-int request_validate(const struct request *req)
-{
-	(void)req;
-	return 0;
-}
-
 ssize_t request_add_pkg(struct request *req,
 		struct fcgi_header h,
 		struct chunk_ptr cp)
