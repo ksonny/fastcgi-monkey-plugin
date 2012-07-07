@@ -45,8 +45,6 @@ ssize_t request_add_pkg(struct request *req,
 
 void request_release_chunks(struct request *req);
 
-void request_reset(struct request *req);
-
 void request_free(struct request *req);
 
 

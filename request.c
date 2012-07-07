@@ -39,6 +39,16 @@ error:
 	return -1;
 }
 
+static void request_reset(struct request *req)
+{
+	req->state         = AVAILABLE;
+	req->flags         = 0;
+	req->fd            = -1;
+	req->iov.iov_idx   = 0;
+	req->iov.buf_idx   = 0;
+	req->iov.total_len = 0;
+}
+
 int request_assign(struct request *req, int fd)
 {
 	check(req->state == AVAILABLE,
@@ -145,14 +155,6 @@ void request_release_chunks(struct request *req)
 		c = req->cs[i];
 		chunk_release(c);
 	}
-}
-
-void request_reset(struct request *req)
-{
-	req->fd = -1;
-	req->iov.iov_idx     = 0;
-	req->iov.buf_idx     = 0;
-	req->iov.total_len   = 0;
 }
 
 void request_free(struct request *req)
