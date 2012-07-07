@@ -8,7 +8,8 @@
 #define MAX_PACKAGES 32
 
 enum request_state {
-	NEW,
+	AVAILABLE,
+	ASSIGNED,
 	REQUEST_SENT,
 	STREAM_CLOSED,
 	REQUEST_ENDED,

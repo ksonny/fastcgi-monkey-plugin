@@ -6,7 +6,7 @@
 int request_init(struct request *preq, size_t iov_n)
 {
 	struct request req = {
-		.state = NEW,
+		.state = AVAILABLE,
 		.fd    = -1,
 		.flags = 0,
 		.cs    = NULL,
