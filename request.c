@@ -6,7 +6,7 @@
 int request_init(struct request *preq, size_t iov_n)
 {
 	struct request req = {
-		.state = AVAILABLE,
+		.state = REQ_AVAILABLE,
 		.fd    = -1,
 		.flags = 0,
 		.cs    = NULL,
@@ -46,7 +46,7 @@ error:
 
 static void request_reset(struct request *req)
 {
-	req->state         = AVAILABLE;
+	req->state         = REQ_AVAILABLE;
 	req->flags         = 0;
 	req->fd            = -1;
 	req->iov.iov_idx   = 0;
@@ -58,10 +58,10 @@ int request_assign(struct request *req,
 	struct client_session *cs,
 	struct session_request *sr)
 {
-	check(req->state == AVAILABLE,
+	check(req->state == REQ_AVAILABLE,
 		"Request state is not AVAILABLE.");
 
-	req->state = ASSIGNED;
+	req->state = REQ_ASSIGNED;
 	req->fd    = cs->socket;
 	req->ccs   = cs;
 	req->sr    = sr;
@@ -72,7 +72,7 @@ error:
 
 int request_make_available(struct request *req)
 {
-	check(req->state == REQUEST_ENDED,
+	check(req->state == REQ_ENDED,
 		"Request state is not REQUEST_ENDED");
 
 	request_reset(req);
@@ -99,9 +99,9 @@ ssize_t request_add_pkg(struct request *req,
 		break;
 
 	case FCGI_STDOUT:
-		check(req->state == REQUEST_SENT, "Request not yet sent.");
+		check(req->state == REQ_SENT, "Request not yet sent.");
 		if (h.body_len == 0) {
-			req->state = STREAM_CLOSED;
+			req->state = REQ_STREAM_CLOSED;
 			break;
 		}
 
@@ -116,7 +116,8 @@ ssize_t request_add_pkg(struct request *req,
 		break;
 
 	case FCGI_END_REQUEST:
-		check(req->state == STREAM_CLOSED, "Stream not yet closed.");
+		check(req->state == REQ_STREAM_CLOSED,
+			"Stream not yet closed.");
 		fcgi_read_end_req_body(cp.data + sizeof(h), &b);
 
 		switch (b.app_status) {
@@ -141,7 +142,7 @@ ssize_t request_add_pkg(struct request *req,
 			break;
 		}
 
-		req->state = REQUEST_ENDED;
+		req->state = REQ_ENDED;
 		break;
 
 	case 0:
@@ -236,12 +237,12 @@ static struct request *request_list_get_by_state(struct request_list *rl,
 
 struct request *request_list_get_available(struct request_list *rl)
 {
-	return request_list_get_by_state(rl, AVAILABLE);
+	return request_list_get_by_state(rl, REQ_AVAILABLE);
 }
 
 struct request *request_list_get_assigned(struct request_list *rl)
 {
-	return request_list_get_by_state(rl, ASSIGNED);
+	return request_list_get_by_state(rl, REQ_ASSIGNED);
 }
 
 struct request *request_list_get(struct request_list *rl, uint16_t req_id)
