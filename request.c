@@ -144,6 +144,9 @@ ssize_t request_add_pkg(struct request *req,
 		req->state = REQUEST_ENDED;
 		break;
 
+	case 0:
+		sentinel("Received NULL package.");
+		break;
 	default:
 		log_info("Ignore package: %s",
 			FCGI_MSG_TYPE_STR(h.type));
