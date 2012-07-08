@@ -6,6 +6,7 @@
 #define DEBUG
 
 #include "dbg.h"
+#include "handle.h"
 #include "protocol.h"
 #include "chunk.h"
 #include "request.h"
@@ -16,12 +17,13 @@ struct fcgi_server {
 	int    port;
 	struct chunk_list cm;
 	struct request_list rl;
+	struct handle_list fdl;
 };
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
               "FastCGI client",		/* name */
               VERSION,			/* version */
-              MK_PLUGIN_STAGE_30);	/* hooks */
+              MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX);	/* hooks */
 
 static struct fcgi_server server;
 
@@ -195,6 +197,8 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 		"Failed to read config.");
 	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
 		"Failed to init request list.");
+	check(!handle_list_init(&server.fdl, 10),
+		"Failed to init fd list.");
 
 	chunk_list_init(&server.cm);
 
@@ -211,34 +215,85 @@ void _mkp_exit()
 	log_info("Exit module.");
 	chunk_list_free_chunks(&server.cm);
 	request_list_free(&server.rl);
+	handle_list_free(&server.fdl);
 }
 
-int fcgi_send_request(int fcgi_fd,
+static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
+{
+	size_t cnt = 0, i;
+	const char *p = data, *q = NULL;
+
+	for (i = 0; q < (data + len); i++) {
+		q = memchr(p, '\n', len);
+		if (!q) {
+			break;
+		}
+		cnt += (size_t)(q - p) + 1;
+		if (p + 2 >= q) {
+			break;
+		}
+		p = q + 1;
+	}
+	return cnt;
+}
+
+int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 		struct session_request *sr)
+{
+	struct handle *fd;
+
+	fd = handle_list_get_by_state(&server.fdl, HANDLE_AVAILABLE);
+	check_debug(fd, "Max connection limit reached.");
+
+	fd->fd = mk_api->socket_connect(server.addr, server.port);
+	check(fd->fd > 0, "Could not connect to fcgi server.");
+
+	mk_api->socket_set_nonblocking(fd->fd);
+	mk_api->event_add(fd->fd,
+			MK_EPOLL_WRITE,
+			plugin,
+			cs, sr,
+			MK_EPOLL_LEVEL_TRIGGERED);
+
+	fd->state = HANDLE_READY;
+
+	return 0;
+error:
+	return -1;
+}
+
+int fcgi_prepare_request(struct request *req)
 {
 	struct fcgi_begin_req_body b = {
 		.role  = FCGI_RESPONDER,
-		.flags = 0,
+		.flags = FCGI_KEEP_CONN,
 	};
 	struct fcgi_header h = {
 		.version  = FCGI_VERSION_1,
-		.type     = 0,
-		.req_id   = 1,
-		.body_len = 0,
 		.body_pad = 0,
 	};
-	mk_pointer env;
-	ssize_t bytes_sent;
-	struct mk_iov *iov = NULL;
 	size_t len1 = sizeof(h) + sizeof(b),
 	       len2 = sizeof(h),
 	       len3 = 2 * sizeof(h);
-	uint8_t p1[len1], p2[len2], p3[len3];
+	uint8_t *p1 = NULL, *p2 = NULL, *p3 = NULL;
+	int req_id = -1;
+	mk_pointer env = {0};
 
-	env = fcgi_create_env(sr);
+	req_id = request_list_index_of(&server.rl, req);
+	check(req_id > 0 && req_id < server.rl.n,
+		"Bad request id.");
+	env = fcgi_create_env(req->sr);
+
+	check(req_id != -1, "Could not get index of request.");
+
+	p1 = mk_api->mem_alloc(len1 + len2 + len3);
+	check_mem(p1);
+	p2 = p1 + len1;
+	p3 = p2 + len2;
 
 	// Write begin request.
 	h.type     = FCGI_BEGIN_REQUEST;
+	h.req_id   = req_id;
 	h.body_len = sizeof(b);
 	fcgi_write_header(p1, &h);
 	fcgi_write_begin_req_body(p1 + sizeof(h), &b);
@@ -258,152 +313,142 @@ int fcgi_send_request(int fcgi_fd,
 	h.body_len = 0;
 	fcgi_write_header(p3 + sizeof(h), &h);
 
-	iov = mk_api->iov_create(4, 0);
-	check_mem(iov);
-	mk_api->iov_add_entry(iov, (char *)p1, len1, mk_iov_none, 0);
-	mk_api->iov_add_entry(iov, (char *)p2, len2, mk_iov_none, 0);
-	mk_api->iov_add_entry(iov, env.data, env.len, mk_iov_none, 0);
-	mk_api->iov_add_entry(iov, (char *)p3, len3, mk_iov_none, 0);
+	mk_api->iov_add_entry(&req->iov, (char *)p1, len1, mk_iov_none, 1);
+	mk_api->iov_add_entry(&req->iov, (char *)p2, len2, mk_iov_none, 0);
+	mk_api->iov_add_entry(&req->iov, env.data, env.len, mk_iov_none, 1);
+	mk_api->iov_add_entry(&req->iov, (char *)p3, len3, mk_iov_none, 0);
 
-	bytes_sent = mk_api->iov_send(fcgi_fd, iov);
-	check(bytes_sent == (ssize_t)iov->total_len, "Failed to sent request.");
-
-	mk_api->mem_free(env.data);
-	mk_api->iov_free(iov);
 	return 0;
 error:
+	if (p1) mk_api->mem_free(p1);
 	if (env.data) mk_api->mem_free(env.data);
-	if (iov) mk_api->iov_free(iov);
-	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	return -1;
 }
 
-static const char *strnchr(const char *p, const size_t len, const char c)
+int fcgi_send_request(struct request *req, struct handle *fd)
 {
-	size_t i;
-	for (i = 0; i < len; i++) {
-		if (*(p + i) == c) return (p + i);
-	}
-	return '\0';
+	check(mk_api->socket_sendv(fd->fd, &req->iov) > 0,
+		"Socket error occured.");
+	req->state = REQ_SENT;
+	fd->state  = HANDLE_RECEIVING;
+
+	request_release_chunks(req);
+	return 0;
+error:
+	request_release_chunks(req);
+	return -1;
 }
 
-#define SIZEOF_CRLF 2
-#define SIZEOF_LF 1
-
-static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
+int fcgi_end_request(struct request *req)
 {
-	size_t cnt = 0, i;
-	const char *p = data, *q = NULL;
+	ssize_t headers_offset;
 
-	for (i = 0; q < (data + len); i++) {
-		q = strnchr(p, len, '\n');
-		if (!q) {
-			break;
-		}
-		cnt += (size_t)(q - p) + SIZEOF_LF;
-		if (p + SIZEOF_CRLF >= q) {
-			break;
-		}
-		p = q + SIZEOF_LF;
-	}
-	return cnt;
+	headers_offset = fcgi_parse_cgi_headers(req->iov.io[0].iov_base,
+			req->iov.io[0].iov_len);
+
+	mk_api->header_set_http_status(req->sr,  MK_HTTP_OK);
+	req->sr->headers.cgi = SH_CGI;
+	req->sr->headers.content_length = req->iov.total_len - headers_offset;
+	mk_api->header_send(req->fd, req->ccs, req->sr);
+	mk_api->socket_sendv(req->fd, &req->iov);
+
+	req->state = REQ_FINISHED;
+	/*
+	mk_api->event_socket_change_mode(req->ccs->socket,
+			MK_EPOLL_WRITE,
+			MK_EPOLL_LEVEL_TRIGGERED);
+			*/
+
+	request_release_chunks(req);
+	return 0;
 }
 
-static void fcgi_trace_header(const struct fcgi_header h)
+int fcgi_recv_response(struct handle *fd)
 {
-	(void)h;
-	PLUGIN_TRACE("[HEADER] V: %1d, ID: %1d, L: %4d, P: %1d T: %s",
-		h.version,
-		h.req_id,
-		h.body_len,
-		h.body_pad,
-		fcgi_msg_type_str[h.type < FCGI_UNKNOWN_TYPE
-			? h.type : FCGI_UNKNOWN_TYPE]);
-}
+	size_t pkg_size, inherit = 0;
+	ssize_t ret = 0;
+	int done = 0;
 
-int fcgi_recv_response(int fcgi_fd,
-		struct client_session *cs,
-		struct session_request *sr)
-{
-	size_t headers_offset, bytes_read, pkg_size, inherit = 0;
-	ssize_t ret;
-
-	struct request req;
 	struct fcgi_header h;
+	struct request *req;
 	struct chunk *c;
 	struct chunk_ptr write = {0}, read = {0};
 
-	request_init(&req, 32);
-	req.state = REQUEST_SENT;
-
 	c = chunk_list_current(&server.cm);
 	if (c != NULL) {
-		write = chunk_remain(c);
-		read  = write;
+		write = chunk_write_ptr(c);
+		read  = chunk_read_ptr(c);
 	}
 
 	do {
 		if (inherit > 0 || write.len < sizeof(h)) {
 			PLUGIN_TRACE("New chunk, inherit %ld.", inherit);
-			c = chunk_new(4096);
+			c = chunk_new(65536);
 			check_mem(c);
 			check(!chunk_list_add(&server.cm, c, inherit),
 				"Failed to add chunk.");
-			write   = chunk_remain(c);
-			read    = chunk_base(c);
+			write   = chunk_write_ptr(c);
 			inherit = 0;
 		}
 
-		ret = mk_api->socket_read(fcgi_fd, write.data, write.len);
-		check(ret != -1, "Socket read error.");
+		ret = mk_api->socket_read(fd->fd, write.data, write.len);
 
-		bytes_read = ret;
-		check(!chunk_commit(c, bytes_read), "Failed to commit data.");
-		write = chunk_remain(c);
+		if (ret == 0) {
+			fd->state = HANDLE_CLOSING;
+			done = 1;
+		} else if (ret == -1) {
+			if (errno == EAGAIN) {
+				errno = 0;
+				done = 1;
+			} else {
+				sentinel("Socket read error.");
+			}
+		} else {
+			write.data += ret;
+			write.len  -= ret;
+			check(!chunk_set_write_ptr(c, write),
+				"Failed to set new write ptr.");
+			read = chunk_read_ptr(c);
+		}
 
-		while (read.data < write.data) {
+		while (read.len > 0) {
 			fcgi_read_header(read.data, &h);
-			fcgi_trace_header(h);
-
 			pkg_size = sizeof(h) + h.body_len + h.body_pad;
 
-			if (read.data + pkg_size > write.data) {
-				inherit = write.data - read.data;
+			req = request_list_get(&server.rl, h.req_id);
+			check(req, "Failed to get request %d.", h.req_id);
+
+			if (read.len < pkg_size) {
+				inherit = read.len;
 				ret     = inherit;
 			} else {
-				ret = request_add_pkg(&req, h, read);
-				check(ret > 0, "Failed to add pkg.");
+				if (h.type == FCGI_END_REQUEST) {
+					fd->state = HANDLE_READY;
+				}
+				ret = request_add_pkg(req, h, read);
+				check_debug(ret > 0, "Failed to add pkg.");
 			}
+
 			read.data += ret;
 			read.len  -= ret;
 		}
-	} while (bytes_read > 0);
 
-	check(req.state == REQUEST_ENDED, "Request not yet ended.");
+		if (read.parent == c) {
+			check(!chunk_set_read_ptr(c, read),
+				"Failed to set new read ptr.");
+		}
+	} while (!done);
 
-	headers_offset = fcgi_parse_cgi_headers(req.iov.io[0].iov_base,
-			req.iov.io[0].iov_len);
-	mk_api->header_set_http_status(sr,  MK_HTTP_OK);
-	sr->headers.cgi = SH_CGI;
-	sr->headers.content_length = req.iov.total_len - headers_offset;
-	mk_api->header_send(cs->socket, cs, sr);
-	mk_api->socket_sendv(cs->socket, &req.iov);
-
-	request_release_chunks(&req);
-	request_free(&req);
 	return 0;
 error:
-	request_release_chunks(&req);
-	request_free(&req);
 	return -1;
 }
 
 int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		struct session_request *sr)
 {
-	(void)plugin;
 	char *url = NULL;
-	int fcgi_fd = -1;
+	struct request *req;
 
 	url = mk_api->mem_alloc_z(sr->uri.len + 1);
 	memcpy(url, sr->uri.data, sr->uri.len);
@@ -414,22 +459,117 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	}
 	mk_api->mem_free(url);
 
-	fcgi_fd = mk_api->socket_connect(server.addr, server.port);
-	check(fcgi_fd > 0,
-		"Could not connect to %s:%i.", server.addr, server.port);
-	mk_api->socket_cork_flag(fcgi_fd, MK_FALSE);
+	req = request_list_get_by_fd(&server.rl, cs->socket);
+	if (req) {
+		if (req->state == REQ_FINISHED) {
+			request_make_available(req);
+			return MK_PLUGIN_RET_END;
+		}
+		return MK_PLUGIN_RET_CONTINUE;
+	}
 
-	check(!fcgi_send_request(fcgi_fd, sr),
-		"Failed to send request");
-	check(!fcgi_recv_response(fcgi_fd, cs, sr),
-		"Failed to received response.");
+	req = request_list_get_available(&server.rl);
+	check(req,
+		"Failed to find avaiable request struct.");
+	check(!request_assign(req, cs, sr),
+		"Failed to assign request.");
+	check(!fcgi_prepare_request(req),
+		"Failed to prepare request.");
+	check(!fcgi_new_connection(plugin, cs, sr),
+		"Failed to connect to server.");
 
-	mk_api->socket_close(fcgi_fd);
-
-	return MK_PLUGIN_RET_END;
+	return MK_PLUGIN_RET_CONTINUE;
 error:
-	if (fcgi_fd != -1) mk_api->socket_close(fcgi_fd);
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	sr->close_now = MK_TRUE;
 	return MK_PLUGIN_RET_CLOSE_CONX;
+}
+
+static int hangup(int socket)
+{
+	struct handle *fd;
+	fd = handle_list_get_by_fd(&server.fdl, socket);
+
+	if (!fd)
+		return MK_PLUGIN_RET_EVENT_CONTINUE;
+
+	mk_api->event_del(fd->fd);
+	mk_api->socket_close(fd->fd);
+
+	fd->fd    = -1;
+	fd->state = HANDLE_AVAILABLE;
+
+	return MK_PLUGIN_RET_EVENT_OWNED;
+}
+
+int _mkp_event_write(int socket)
+{
+	struct request *req;
+	struct handle *fd;
+
+	fd  = handle_list_get_by_fd(&server.fdl, socket);
+	req = fd ? NULL : request_list_get_by_fd(&server.rl, socket);
+
+	if (fd) {
+		check(fd->state == HANDLE_READY,
+			"[FD %d] Not ready.", fd->fd);
+		req = request_list_get_assigned(&server.rl);
+		check_debug(req,
+			"[FD %d] No request available.", fd->fd);
+		check(!fcgi_send_request(req, fd),
+			"[FD %d] Failed to send request.", fd->fd);
+
+		mk_api->event_socket_change_mode(fd->fd,
+			MK_EPOLL_READ,
+			MK_EPOLL_LEVEL_TRIGGERED);
+		fd->state = HANDLE_RECEIVING;
+
+		return MK_PLUGIN_RET_EVENT_OWNED;
+	} else if (req) {
+
+		if (req->state == REQ_ENDED) {
+			check(!fcgi_end_request(req),
+				"Failed to end request.");
+			return MK_PLUGIN_RET_EVENT_OWNED;
+		} else {
+			return MK_PLUGIN_RET_EVENT_CONTINUE;
+		}
+
+	} else {
+		return MK_PLUGIN_RET_EVENT_CONTINUE;
+	}
+error:
+	return MK_PLUGIN_RET_EVENT_CLOSE;
+}
+
+int _mkp_event_read(int socket)
+{
+	struct handle *fd;
+	fd = handle_list_get_by_fd(&server.fdl, socket);
+
+	if (!fd)
+		return MK_PLUGIN_RET_EVENT_NEXT;
+
+	check(!fcgi_recv_response(fd),
+		"[FD %d] Failed to receive response.", fd->fd);
+	check_debug(fd->state != HANDLE_CLOSING,
+		"[FD %d] Closing connection.", fd->fd);
+
+	mk_api->event_socket_change_mode(fd->fd,
+			MK_EPOLL_WRITE,
+			MK_EPOLL_LEVEL_TRIGGERED);
+
+	return MK_PLUGIN_RET_EVENT_OWNED;
+error:
+	return MK_PLUGIN_RET_EVENT_CLOSE;
+}
+
+int _mkp_event_close(int fd)
+{
+	return hangup(fd);
+}
+
+int _mkp_event_error(int fd)
+{
+	return hangup(fd);
 }
