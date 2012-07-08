@@ -226,7 +226,7 @@ static struct request *request_list_get_by_state(struct request_list *rl,
 	int i;
 	struct request *r = NULL;
 
-	for (i = 0; i < rl->n; i++) {
+	for (i = 1; i < rl->n; i++) {
 		r = rl->rs + i;
 		if (r->state == state)
 			return r;
