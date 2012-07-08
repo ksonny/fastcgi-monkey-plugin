@@ -72,7 +72,7 @@ error:
 
 int request_make_available(struct request *req)
 {
-	check(req->state == REQ_ENDED,
+	check(req->state == REQ_FINISHED,
 		"Request state is not REQUEST_ENDED");
 
 	request_reset(req);

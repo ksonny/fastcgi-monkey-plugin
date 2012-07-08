@@ -13,6 +13,7 @@ enum request_state {
 	REQ_SENT,
 	REQ_STREAM_CLOSED,
 	REQ_ENDED,
+	REQ_FINISHED,
 };
 
 enum request_flags {
