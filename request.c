@@ -245,6 +245,19 @@ struct request *request_list_get_assigned(struct request_list *rl)
 	return request_list_get_by_state(rl, REQ_ASSIGNED);
 }
 
+struct request *request_list_get_by_fd(struct request_list *rl, int fd)
+{
+	int i;
+	struct request *r = NULL;
+
+	for (i = 0; i < rl->n; i++) {
+		r = rl->rs + i;
+		if (r->fd == fd)
+			return r;
+	}
+	return NULL;
+}
+
 struct request *request_list_get(struct request_list *rl, uint16_t req_id)
 {
 	check(req_id < rl->n, "Request id out of range.");

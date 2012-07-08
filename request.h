@@ -58,6 +58,8 @@ struct request *request_list_get_available(struct request_list *rl);
 
 struct request *request_list_get_assigned(struct request_list *rl);
 
+struct request *request_list_get_by_fd(struct request_list *rl, int fd);
+
 struct request *request_list_get(struct request_list *rl, uint16_t req_id);
 
 int request_list_index_of(struct request_list *rl, struct request *r);
