@@ -82,13 +82,12 @@ int chunk_release(struct chunk *c)
 {
 	c->refs -= 1;
 
-	if (c->refs <= 0) {
-		log_info("Freeing chunk on release.");
-		chunk_free(c);
-		return 1;
-	} else {
-		return 0;
-	}
+	check_debug(c->refs > 0, "Free chunk.");
+
+	return 0;
+error:
+	chunk_free(c);
+	return 1;
 }
 
 void chunk_list_init(struct chunk_list *cm)
