@@ -33,6 +33,10 @@ enum fcgi_role {
 	FCGI_FILTER     = 3,
 };
 
+enum fcgi_flags {
+	FCGI_KEEP_CONN = 1,
+};
+
 enum fcgi_protocol_status {
 	FCGI_REQUEST_COMPLETE = 0,
 	FCGI_CANT_MPX_CONN    = 1,
