@@ -4,8 +4,6 @@
 
 #include "MKPlugin.h"
 
-#define DEBUG
-
 #include "dbg.h"
 #include "handle.h"
 #include "protocol.h"
@@ -139,6 +137,7 @@ mk_pointer fcgi_create_env(struct client_session *cs,
 	value.len  = sr->host_alias->len;
 	__write_param(env, len, pos, key, value);
 
+	addr_len = sizeof(addr);
 	if (!getsockname(cs->socket, (struct sockaddr *)&addr, &addr_len)) {
 		if (!inet_ntop(AF_INET, &addr.sin_addr, buffer, 128)) {
 			log_warn("Failed to get bound address.");
@@ -173,6 +172,7 @@ mk_pointer fcgi_create_env(struct client_session *cs,
 	value = sr->host;
 	__write_param(env, len, pos, key, value);
 
+	addr_len = sizeof(addr);
 	if (!getpeername(cs->socket, (struct sockaddr *)&addr, &addr_len)) {
 		inet_ntop(AF_INET, &addr.sin_addr, buffer, 128);
 		mk_api->pointer_set(&key,   "REMOTE_ADDR");
@@ -499,7 +499,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	url = mk_api->mem_alloc_z(sr->uri.len + 1);
 	memcpy(url, sr->uri.data, sr->uri.len);
 
-	if (strcmp(url, "/hello")) {
+	if (strcmp(url, "/fcgitest")) {
 		mk_api->mem_free(url);
 		return MK_PLUGIN_RET_NOT_ME;
 	}
