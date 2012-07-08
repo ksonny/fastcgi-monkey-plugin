@@ -13,50 +13,58 @@ struct chunk *chunk_new(size_t size)
 	check_mem(tmp);
 
 	mk_list_init(&tmp->_head);
-	tmp->pos  = 0;
-	tmp->refs = 0;
-	tmp->size = CHUNK_SIZE(size);
+	tmp->read  = 0;
+	tmp->write = 0;
+	tmp->refs  = 0;
+	tmp->size  = CHUNK_SIZE(size);
 
 	return tmp;
 error:
 	return NULL;
 }
 
-int chunk_commit(struct chunk *c, size_t bytes)
+struct chunk_ptr chunk_read_ptr(struct chunk *c)
 {
-	check(c->size - c->pos >= bytes, "Commited more bytes then available.");
+	return (struct chunk_ptr){
+		.parent = c,
+		.len    = c->write - c->read,
+		.data   = c->data + c->read,
+	};
+}
 
-	c->pos += bytes;
+struct chunk_ptr chunk_write_ptr(struct chunk *c)
+{
+	return (struct chunk_ptr){
+		.parent = c,
+		.len    = c->size - c->write,
+		.data   = c->data + c->write,
+	};
+}
+
+int chunk_set_read_ptr(struct chunk *c, struct chunk_ptr read)
+{
+	check(read.parent == c,
+		"Pointer not from this chunk.");
+	check(read.data >= c->data && read.data <= c->data + c->size,
+		"Pointer out of range for this chunk.");
+
+	c->read = read.data - c->data;
 	return 0;
 error:
 	return -1;
 }
 
-struct chunk_ptr chunk_remain(struct chunk *c)
+int chunk_set_write_ptr(struct chunk *c, struct chunk_ptr write)
 {
-	return (struct chunk_ptr){
-		.parent = c,
-		.len    = c->size - c->pos,
-		.data   = c->data + c->pos,
-	};
-}
+	check(write.parent == c,
+		"Pointer not from this chunk.");
+	check(write.data >= c->data && write.data <= c->data + c->size,
+		"Pointer out of range for this chunk.");
 
-struct chunk_ptr chunk_stored(struct chunk *c)
-{
-	return (struct chunk_ptr){
-		.parent = c,
-		.len    = c->pos,
-		.data   = c->data,
-	};
-}
-
-struct chunk_ptr chunk_base(struct chunk *c)
-{
-	return (struct chunk_ptr){
-		.parent = c,
-		.len    = c->size,
-		.data   = c->data,
-	};
+	c->write = write.data - c->data;
+	return 0;
+error:
+	return -1;
 }
 
 void chunk_free(struct chunk *c)
@@ -102,38 +110,45 @@ error:
  * If inherit > 0 then copy the last inherit bytes commited to old
  * current.
  */
-int chunk_list_add(struct chunk_list *cm, struct chunk *c, size_t inherit)
+int chunk_list_add(struct chunk_list *cm, struct chunk *new, size_t inherit)
 {
-	struct chunk *t = chunk_list_current(cm);
-	struct chunk_ptr p, q;
-	ssize_t begin;
+	struct chunk *old = chunk_list_current(cm);
+	size_t old_pos, new_pos;
+	struct chunk_ptr tmp;
 
-	if (t && inherit > 0) {
-		p = chunk_remain(c);
-		q = chunk_stored(t);
+	chunk_retain(new);
 
-		begin = q.len - inherit;
+	if (old && inherit > 0) {
+		check(old->write >= inherit,
+			"Not enough used on old chunk to inherit.");
+		check(new->size - new->write > inherit,
+			"Not enough free space on new chunk to inherit.");
 
-		check(p.len >= inherit, "Not enough free mem to inherit.");
-		check(begin > 0,        "Not enough used mem to inherit.");
+		old_pos = old->write - inherit;
+		new_pos = new->write;
 
-		memcpy(p.data, q.data + begin, inherit);
-		chunk_commit(c, inherit);
-	}
+		memcpy(new->data + new_pos, old->data + old_pos, inherit);
 
-	if (t) {
-		chunk_release(t);
+		new_pos   += inherit;
+		tmp.parent = new;
+		tmp.len    = new->size - new_pos;
+		tmp.data   = new->data + new_pos;
+
+		check(!chunk_set_write_ptr(new, tmp),
+			"Failed to set new write pointer.");
+		chunk_release(old);
+	} else if (old) {
+		chunk_release(old);
 	} else {
-		check(inherit == 0, "No chunks to inherit from.");
+		check(inherit == 0, "There are no chunks to inherit from.");
 	}
 
-	mk_list_add(&c->_head, &cm->chunks._head);
-	chunk_retain(c);
-
+	mk_list_add(&new->_head, &cm->chunks._head);
 	return 0;
 error:
-	if (mk_list_is_empty(&c->_head)) 
-		mk_list_del(&c->_head);
+	if (mk_list_is_empty(&new->_head)) {
+		mk_list_del(&new->_head);
+	}
 	return -1;
 }
 
@@ -151,7 +166,7 @@ void chunk_list_stats(struct chunk_list *cm)
 
 	mk_list_foreach(head, &cm->chunks._head) {
 		c = mk_list_entry(head, struct chunk, _head);
-		used = c->pos;
+		used = c->write;
 		free = c->size - used;
 
 		log_info("Chunk: %d, S: %ld B, U: %ld B, F: %ld B, R: %d",

@@ -9,7 +9,8 @@
 struct chunk {
 	struct mk_list _head;
 
-	size_t  pos;
+	size_t  read;
+	size_t  write;
 	size_t  size;
 	int32_t refs;
 
@@ -28,13 +29,13 @@ struct chunk_list {
 
 struct chunk *chunk_new(size_t size);
 
-int chunk_commit(struct chunk *c, size_t bytes);
+struct chunk_ptr chunk_read_ptr(struct chunk *c);
 
-struct chunk_ptr chunk_remain(struct chunk *c);
+struct chunk_ptr chunk_write_ptr(struct chunk *c);
 
-struct chunk_ptr chunk_stored(struct chunk *c);
+int chunk_set_read_ptr(struct chunk *c, struct chunk_ptr read);
 
-struct chunk_ptr chunk_base(struct chunk *c);
+int chunk_set_write_ptr(struct chunk *c, struct chunk_ptr write);
 
 void chunk_free(struct chunk *c);
 
