@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include "MKPlugin.h"
 
@@ -95,13 +96,16 @@ int fcgi_create_static_env(void)
 	return 0;
 }
 
-mk_pointer fcgi_create_env(struct session_request *sr)
+mk_pointer fcgi_create_env(struct client_session *cs,
+		struct session_request *sr)
 {
 	mk_pointer key, value;
 	char buffer[128];
 	char *tmpuri = NULL;
 	size_t pos = 0, len = 4096;
 	uint8_t *env;
+	struct sockaddr_in addr;
+	socklen_t addr_len;
 
 	env = mk_api->mem_alloc(len);
 	check_mem(env);
@@ -122,6 +126,37 @@ mk_pointer fcgi_create_env(struct session_request *sr)
 	mk_api->pointer_set(&value, sr->host_conf->host_signature);
 	__write_param(env, len, pos, key, value);
 
+	mk_api->pointer_set(&key,   "DOCUMENT_ROOT");
+	value = sr->host_conf->documentroot;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "SERVER_PROTOCOL");
+	value = sr->protocol_p;
+	__write_param(env, len, pos, key, value);
+
+	mk_api->pointer_set(&key,   "SERVER_NAME");
+	value.data = sr->host_alias->name;
+	value.len  = sr->host_alias->len;
+	__write_param(env, len, pos, key, value);
+
+	if (!getsockname(cs->socket, (struct sockaddr *)&addr, &addr_len)) {
+		if (!inet_ntop(AF_INET, &addr.sin_addr, buffer, 128)) {
+			log_warn("Failed to get bound address.");
+			buffer[0] = '\0';
+		}
+		mk_api->pointer_set(&key,   "SERVER_ADDR");
+		mk_api->pointer_set(&value, buffer);
+		__write_param(env, len, pos, key, value);
+
+		snprintf(buffer, 128, "%d", ntohs(addr.sin_port));
+		mk_api->pointer_set(&key,   "SERVER_PORT");
+		mk_api->pointer_set(&value, buffer);
+		__write_param(env, len, pos, key, value);
+	} else {
+		log_warn("%s", clean_errno());
+		errno = 0;
+	}
+
 	mk_api->pointer_set(&key,   "SCRIPT_FILENAME");
 	value = sr->real_path;
 	__write_param(env, len, pos, key, value);
@@ -138,9 +173,20 @@ mk_pointer fcgi_create_env(struct session_request *sr)
 	value = sr->host;
 	__write_param(env, len, pos, key, value);
 
-	mk_api->pointer_set(&key,   "SERVER_PROTOCOL");
-	value = sr->protocol_p;
-	__write_param(env, len, pos, key, value);
+	if (!getpeername(cs->socket, (struct sockaddr *)&addr, &addr_len)) {
+		inet_ntop(AF_INET, &addr.sin_addr, buffer, 128);
+		mk_api->pointer_set(&key,   "REMOTE_ADDR");
+		mk_api->pointer_set(&value, buffer);
+		__write_param(env, len, pos, key, value);
+
+		snprintf(buffer, 128, "%d", ntohs(addr.sin_port));
+		mk_api->pointer_set(&key,   "REMOTE_PORT");
+		mk_api->pointer_set(&value, buffer);
+		__write_param(env, len, pos, key, value);
+	} else {
+		log_warn("%s", clean_errno());
+		errno = 0;
+	}
 
 	mk_api->pointer_set(&key,   "REQUEST_URI");
 	if (sr->query_string.len > 0) {
@@ -282,7 +328,7 @@ int fcgi_prepare_request(struct request *req)
 	req_id = request_list_index_of(&server.rl, req);
 	check(req_id > 0 && req_id < server.rl.n,
 		"Bad request id.");
-	env = fcgi_create_env(req->sr);
+	env = fcgi_create_env(req->ccs, req->sr);
 
 	check(req_id != -1, "Could not get index of request.");
 
