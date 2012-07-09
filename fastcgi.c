@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <regex.h>
 
 #include "MKPlugin.h"
 
@@ -12,11 +14,12 @@
 
 struct fcgi_server {
 	struct mk_config *conf;
-	char  *addr;
-	int    port;
-	struct chunk_list cm;
-	struct request_list rl;
-	struct handle_list fdl;
+	regex_t match_regex;
+	char   *addr;
+	int     port;
+	struct  chunk_list cm;
+	struct  request_list rl;
+	struct  handle_list fdl;
 };
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
@@ -235,6 +238,9 @@ error:
 
 int _mkp_init(struct plugin_api **api, char *confdir)
 {
+	int ret = 0;
+	char error_str[80];
+
 	mk_api = *api;
 
 	check(!fcgi_validate_struct_sizes(),
@@ -251,13 +257,21 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
 		"Failed to init request list.");
 
+	ret = regcomp(&server.match_regex, "/fcgitest", REG_EXTENDED|REG_NOSUB);
+	check(!ret, "Regex failure.");
+
 	return 0;
 error:
+	if (ret) {
+		regerror(ret, &server.match_regex, error_str, 80);
+		log_err("Regex compile failed: %s", error_str);
+	}
 	return -1;
 }
 
 void _mkp_exit()
 {
+	regfree(&server.match_regex);
 	log_info("Exit module.");
 	chunk_list_free_chunks(&server.cm);
 	request_list_free(&server.rl);
@@ -496,15 +510,6 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	char *url = NULL;
 	struct request *req;
 
-	url = mk_api->mem_alloc_z(sr->uri.len + 1);
-	memcpy(url, sr->uri.data, sr->uri.len);
-
-	if (strcmp(url, "/fcgitest")) {
-		mk_api->mem_free(url);
-		return MK_PLUGIN_RET_NOT_ME;
-	}
-	mk_api->mem_free(url);
-
 	req = request_list_get_by_fd(&server.rl, cs->socket);
 	if (req) {
 		if (req->state == REQ_FINISHED) {
@@ -514,7 +519,16 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		return MK_PLUGIN_RET_CONTINUE;
 	}
 
+	url = mk_api->mem_alloc_z(sr->uri.len + 1);
+	memcpy(url, sr->uri.data, sr->uri.len);
+	if (regexec(&server.match_regex, url, 0, NULL, 0)) {
+		mk_api->mem_free(url);
+		return MK_PLUGIN_RET_NOT_ME;
+	}
+	mk_api->mem_free(url);
+
 	req = request_list_get_available(&server.rl);
+
 	check(req,
 		"Failed to find avaiable request struct.");
 	check(!request_assign(req, cs, sr),
@@ -529,6 +543,10 @@ error:
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	sr->close_now = MK_TRUE;
 	return MK_PLUGIN_RET_CLOSE_CONX;
+}
+
+void _mkp_core_thctx(void)
+{
 }
 
 static int hangup(int socket)
