@@ -283,6 +283,9 @@ void request_list_free(struct request_list *rl)
 {
 	int i;
 
+	if (!rl)
+		return;
+
 	for (i = 0; i < rl->n; i++) {
 		request_free(rl->rs + i);
 	}
