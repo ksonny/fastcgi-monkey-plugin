@@ -20,6 +20,9 @@ struct chunk *chunk_new(size_t size)
 
 	return tmp;
 error:
+	if (tmp) {
+		mk_api->mem_free(tmp);
+	}
 	return NULL;
 }
 
@@ -109,44 +112,44 @@ error:
  * If inherit > 0 then copy the last inherit bytes commited to old
  * current.
  */
-int chunk_list_add(struct chunk_list *cm, struct chunk *new, size_t inherit)
+int chunk_list_add(struct chunk_list *cm, struct chunk *a, size_t inherit)
 {
-	struct chunk *old = chunk_list_current(cm);
-	size_t old_pos, new_pos;
+	struct chunk *b = chunk_list_current(cm);
+	size_t b_pos, a_pos;
 	struct chunk_ptr tmp;
 
-	chunk_retain(new);
+	chunk_retain(a);
 
-	if (old && inherit > 0) {
-		check(old->write >= inherit,
+	if (b && inherit > 0) {
+		check(b->write >= inherit,
 			"Not enough used on old chunk to inherit.");
-		check(new->size - new->write > inherit,
+		check(a->size - a->write > inherit,
 			"Not enough free space on new chunk to inherit.");
 
-		old_pos = old->write - inherit;
-		new_pos = new->write;
+		a_pos = a->write;
+		b_pos = b->write - inherit;
 
-		memcpy(new->data + new_pos, old->data + old_pos, inherit);
+		memcpy(a->data + a_pos, b->data + b_pos, inherit);
 
-		new_pos   += inherit;
-		tmp.parent = new;
-		tmp.len    = new->size - new_pos;
-		tmp.data   = new->data + new_pos;
+		a_pos     += inherit;
+		tmp.parent = a;
+		tmp.len    = a->size - a_pos;
+		tmp.data   = a->data + a_pos;
 
-		check(!chunk_set_write_ptr(new, tmp),
+		check(!chunk_set_write_ptr(a, tmp),
 			"Failed to set new write pointer.");
-		chunk_release(old);
-	} else if (old) {
-		chunk_release(old);
+		chunk_release(b);
+	} else if (b) {
+		chunk_release(b);
 	} else {
 		check(inherit == 0, "There are no chunks to inherit from.");
 	}
 
-	mk_list_add(&new->_head, &cm->chunks._head);
+	mk_list_add(&a->_head, &cm->chunks._head);
 	return 0;
 error:
-	if (mk_list_is_empty(&new->_head)) {
-		mk_list_del(&new->_head);
+	if (mk_list_is_empty(&a->_head)) {
+		mk_list_del(&a->_head);
 	}
 	return -1;
 }

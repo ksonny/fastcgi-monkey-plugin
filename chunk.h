@@ -1,10 +1,9 @@
 #ifndef __MK_CHUNK__
 #define __MK_CHUNK__
 
+#include <stdint.h>
 #include <sys/uio.h>
 #include "mk_list.h"
-
-#define CHUNK_SIZE(SIZE) (SIZE) - offsetof(struct chunk, data) 
 
 struct chunk {
 	struct mk_list _head;
@@ -27,6 +26,8 @@ struct chunk_list {
 	struct chunk chunks;
 };
 
+#define CHUNK_SIZE(SIZE) (SIZE) - offsetof(struct chunk, data)
+
 struct chunk *chunk_new(size_t size);
 
 struct chunk_ptr chunk_read_ptr(struct chunk *c);
@@ -48,7 +49,7 @@ void chunk_list_init(struct chunk_list *cm);
 
 struct chunk *chunk_list_current(struct chunk_list *cm);
 
-int chunk_list_add(struct chunk_list *cm, struct chunk *c, size_t inherit);
+int chunk_list_add(struct chunk_list *cm, struct chunk *a, size_t inherit);
 
 void chunk_list_stats(struct chunk_list *cm);
 
