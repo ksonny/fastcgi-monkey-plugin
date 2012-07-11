@@ -504,11 +504,13 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		struct session_request *sr)
 {
 	char *url = NULL;
-	struct request *req;
+	struct request *req = NULL;
 
 	req = request_list_get_by_fd(&server.rl, cs->socket);
 	if (req) {
-		if (req->state == REQ_FINISHED) {
+		if (req->state == REQ_ENDED) {
+			check(!fcgi_end_request(req),
+				"Failed to end request.");
 			request_make_available(req);
 			return MK_PLUGIN_RET_END;
 		}
@@ -536,6 +538,9 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	return MK_PLUGIN_RET_CONTINUE;
 error:
+	if (req) {
+		request_make_available(req);
+	}
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	sr->close_now = MK_TRUE;
 	return MK_PLUGIN_RET_CLOSE_CONX;
@@ -568,7 +573,6 @@ int _mkp_event_write(int socket)
 	struct handle *fd;
 
 	fd  = handle_list_get_by_fd(&server.fdl, socket);
-	req = fd ? NULL : request_list_get_by_fd(&server.rl, socket);
 
 	if (fd) {
 		check(fd->state == HANDLE_READY,
@@ -586,10 +590,6 @@ int _mkp_event_write(int socket)
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
 
-	} else if (req && req->state == REQ_ENDED) {
-
-		check(!fcgi_end_request(req),
-			"Failed to end request.");
 	}
 
 	return MK_PLUGIN_RET_EVENT_CONTINUE;
