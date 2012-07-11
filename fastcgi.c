@@ -535,8 +535,8 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		"Failed to assign request.");
 	check(!fcgi_prepare_request(req),
 		"Failed to prepare request.");
-	check(!fcgi_new_connection(plugin, cs, sr),
-		"Failed to connect to server.");
+
+	fcgi_new_connection(plugin, cs, sr);
 
 	return MK_PLUGIN_RET_CONTINUE;
 error:
