@@ -568,7 +568,7 @@ static int hangup(int socket)
 
 int _mkp_event_write(int socket)
 {
-	struct request *req;
+	struct request *req = NULL;
 	struct handle *fd;
 
 	fd  = handle_list_get_by_fd(&server.fdl, socket);
@@ -589,20 +589,19 @@ int _mkp_event_write(int socket)
 		fd->state = HANDLE_RECEIVING;
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
-	} else if (req) {
 
-		if (req->state == REQ_ENDED) {
-			check(!fcgi_end_request(req),
-				"Failed to end request.");
-			return MK_PLUGIN_RET_EVENT_OWNED;
-		} else {
-			return MK_PLUGIN_RET_EVENT_CONTINUE;
-		}
+	} else if (req && req->state == REQ_ENDED) {
 
-	} else {
-		return MK_PLUGIN_RET_EVENT_CONTINUE;
+		check(!fcgi_end_request(req),
+			"Failed to end request.");
 	}
+
+	return MK_PLUGIN_RET_EVENT_CONTINUE;
 error:
+	if (req) {
+		mk_api->header_set_http_status(req->sr,
+			MK_SERVER_INTERNAL_ERROR);
+	}
 	return MK_PLUGIN_RET_EVENT_CLOSE;
 }
 
