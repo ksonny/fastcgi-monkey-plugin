@@ -409,15 +409,11 @@ int fcgi_end_request(struct request *req)
 	mk_api->header_set_http_status(req->sr,  MK_HTTP_OK);
 	req->sr->headers.cgi = SH_CGI;
 	req->sr->headers.content_length = req->iov.total_len - headers_offset;
+
 	mk_api->header_send(req->fd, req->ccs, req->sr);
 	mk_api->socket_sendv(req->fd, &req->iov);
 
 	req->state = REQ_FINISHED;
-	/*
-	mk_api->event_socket_change_mode(req->ccs->socket,
-			MK_EPOLL_WRITE,
-			MK_EPOLL_LEVEL_TRIGGERED);
-			*/
 
 	request_release_chunks(req);
 	return 0;
