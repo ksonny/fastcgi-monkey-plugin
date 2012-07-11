@@ -607,18 +607,18 @@ error:
 
 int _mkp_event_read(int socket)
 {
-	struct handle *fd;
-	fd = handle_list_get_by_fd(&server.fdl, socket);
+	struct handle *h;
+	h = handle_list_get_by_fd(&server.fdl, socket);
 
-	if (!fd)
+	if (!h)
 		return MK_PLUGIN_RET_EVENT_NEXT;
 
-	check(!fcgi_recv_response(fd),
-		"[FD %d] Failed to receive response.", fd->fd);
-	check_debug(fd->state != HANDLE_CLOSING,
-		"[FD %d] Closing connection.", fd->fd);
+	check(!fcgi_recv_response(h),
+		"[FD %d] Failed to receive response.", h->fd);
+	check_debug(h->state != HANDLE_CLOSING,
+		"[FD %d] Closing connection.", h->fd);
 
-	mk_api->event_socket_change_mode(fd->fd,
+	mk_api->event_socket_change_mode(h->fd,
 			MK_EPOLL_WRITE,
 			MK_EPOLL_LEVEL_TRIGGERED);
 
