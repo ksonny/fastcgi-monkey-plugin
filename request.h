@@ -47,7 +47,7 @@ int request_assign(struct request *req,
 	struct client_session *cs,
 	struct session_request *sr);
 
-int request_make_available(struct request *req);
+int request_recycle(struct request *req);
 
 ssize_t request_add_pkg(struct request *req,
 		struct fcgi_header h,

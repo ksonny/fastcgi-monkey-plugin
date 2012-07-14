@@ -515,7 +515,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		if (req->state == REQ_ENDED) {
 			check(!fcgi_end_request(req),
 				"Failed to end request.");
-			request_make_available(req);
+			request_recycle(req);
 			return MK_PLUGIN_RET_END;
 		}
 		return MK_PLUGIN_RET_CONTINUE;
@@ -543,7 +543,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	return MK_PLUGIN_RET_CONTINUE;
 error:
 	if (req) {
-		request_make_available(req);
+		request_recycle(req);
 	}
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	sr->close_now = MK_TRUE;

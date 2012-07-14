@@ -83,15 +83,15 @@ error:
 	return -1;
 }
 
-int request_make_available(struct request *req)
+int request_recycle(struct request *req)
 {
-	check(req->state == REQ_FINISHED,
-		"Request state is not REQUEST_ENDED");
+	if (req->state != REQ_FINISHED) {
+		log_warn("Recycling un-finished request.");
+	}
 
+	request_release_chunks(req);
 	request_reset(req);
 	return 0;
-error:
-	return -1;
 }
 
 static int request_iov_add_entry(struct mk_iov *iov,
