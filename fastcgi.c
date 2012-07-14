@@ -243,6 +243,10 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 
 	mk_api = *api;
 
+	chunk_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	request_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	handle_module_init(mk_api->mem_alloc, mk_api->mem_free);
+
 	check(!fcgi_validate_struct_sizes(),
 		"Validating struct sizes failed.");
 	check(!fcgi_conf(confdir),
@@ -529,7 +533,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	check(req,
 		"Failed to find avaiable request struct.");
-	check(!request_assign(req, cs, sr),
+	check(!request_assign(req, cs->socket, cs, sr),
 		"Failed to assign request.");
 	check(!fcgi_prepare_request(req),
 		"Failed to prepare request.");

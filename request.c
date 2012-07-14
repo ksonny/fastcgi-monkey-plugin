@@ -1,7 +1,19 @@
-#include "request.h"
+#include <stdlib.h>
 
 #include "dbg.h"
 #include "protocol.h"
+
+#include "request.h"
+
+static void *(*mem_alloc)(const size_t) = &malloc;
+static void (*mem_free)(void *) = free;
+
+void request_module_init(void *(*mem_alloc_p)(const size_t),
+		void (*mem_free_p)(void *))
+{
+	mem_alloc = mem_alloc_p;
+	mem_free  = mem_free_p;
+}
 
 int request_init(struct request *preq, size_t iov_n)
 {
@@ -23,13 +35,13 @@ int request_init(struct request *preq, size_t iov_n)
 	struct iovec *io   = NULL;
 	char **buf_to_free = NULL;
   
-	io = mk_api->mem_alloc(iov_n * sizeof(*io));
+	io = mem_alloc(iov_n * sizeof(*io));
 	check_mem(io);
 
-	cs = mk_api->mem_alloc(iov_n * sizeof(*cs));
+	cs = mem_alloc(iov_n * sizeof(*cs));
 	check_mem(cs);
 
-	buf_to_free = mk_api->mem_alloc(iov_n * sizeof(*buf_to_free));
+	buf_to_free = mem_alloc(iov_n * sizeof(*buf_to_free));
 	check_mem(buf_to_free);
 
 	req.cs              = cs;
@@ -39,8 +51,8 @@ int request_init(struct request *preq, size_t iov_n)
 	memcpy(preq, &req, sizeof(req));
 	return 0;
 error:
-	if (io) mk_api->mem_free(io);
-	if (cs) mk_api->mem_free(cs);
+	if (io) mem_free(io);
+	if (cs) mem_free(cs);
 	return -1;
 }
 
@@ -55,6 +67,7 @@ static void request_reset(struct request *req)
 }
 
 int request_assign(struct request *req,
+	int fd,
 	struct client_session *cs,
 	struct session_request *sr)
 {
@@ -62,7 +75,7 @@ int request_assign(struct request *req,
 		"Request state is not AVAILABLE.");
 
 	req->state = REQ_ASSIGNED;
-	req->fd    = cs->socket;
+	req->fd    = fd;
 	req->ccs   = cs;
 	req->sr    = sr;
 	return 0;
@@ -77,6 +90,30 @@ int request_make_available(struct request *req)
 
 	request_reset(req);
 	return 0;
+error:
+	return -1;
+}
+
+static int request_iov_add_entry(struct mk_iov *iov,
+	uint8_t *buf,
+	size_t len,
+	int free)
+{
+	check(iov->size > iov->iov_idx, "Index out of bounds.");
+
+	if (buf) {
+		iov->io[iov->iov_idx].iov_base = buf;
+		iov->io[iov->iov_idx].iov_len  = len;
+		iov->iov_idx++;
+		iov->total_len += len;
+	}
+
+	if (free == 1) {
+		iov->buf_to_free[iov->buf_idx] = (char *)buf;
+		iov->buf_idx++;
+	}
+
+	return iov->iov_idx;
 error:
 	return -1;
 }
@@ -108,10 +145,9 @@ ssize_t request_add_pkg(struct request *req,
 		chunk_retain(cp.parent);
 		req->cs[req->iov.iov_idx] = cp.parent;
 
-		mk_api->iov_add_entry(&req->iov,
-				(char *)cp.data + sizeof(h),
+		request_iov_add_entry(&req->iov,
+				cp.data + sizeof(h),
 				h.body_len,
-				mk_iov_none,
 				0);
 		break;
 
@@ -171,7 +207,7 @@ void request_release_chunks(struct request *req)
 	}
 	for (i = 0; i < req->iov.buf_idx; i++) {
 		if (req->iov.buf_to_free[i]) {
-			mk_api->mem_free(req->iov.buf_to_free[i]);
+			mem_free(req->iov.buf_to_free[i]);
 			req->iov.buf_to_free[i] = NULL;
 		}
 	}
@@ -184,11 +220,11 @@ void request_free(struct request *req)
 {
 	request_reset(req);
 	if (req->cs) {
-		mk_api->mem_free(req->cs);
+		mem_free(req->cs);
 		req->cs = NULL;
 	}
 	if (req->iov.io) {
-		mk_api->mem_free(req->iov.io);
+		mem_free(req->iov.io);
 		req->iov.io = NULL;
 	}
 }
@@ -198,7 +234,7 @@ int request_list_init(struct request_list *rl, int n)
 	struct request *tmp = NULL;
 	int i;
 
-	tmp = mk_api->mem_alloc(n * sizeof(*tmp));
+	tmp = mem_alloc(n * sizeof(*tmp));
 	check_mem(tmp);
 
 	for (i = 0; i < n; i++) {
@@ -217,7 +253,7 @@ error:
 			request_free(tmp + i);
 		}
 	}
-	if (tmp) mk_api->mem_free(tmp);
+	if (tmp) mem_free(tmp);
 	return -1;
 }
 
@@ -289,7 +325,7 @@ void request_list_free(struct request_list *rl)
 	for (i = 0; i < rl->n; i++) {
 		request_free(rl->rs + i);
 	}
-	mk_api->mem_free(rl->rs);
+	mem_free(rl->rs);
 	rl->n  = 0;
 	rl->rs = NULL;
 }

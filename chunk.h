@@ -2,7 +2,7 @@
 #define __MK_CHUNK__
 
 #include <stdint.h>
-#include <sys/uio.h>
+
 #include "mk_list.h"
 
 struct chunk {
@@ -27,6 +27,9 @@ struct chunk_list {
 };
 
 #define CHUNK_SIZE(SIZE) (SIZE) - offsetof(struct chunk, data)
+
+void chunk_module_init(void *(*mem_alloc_f)(const size_t),
+		void (*mem_free_f)(void *));
 
 struct chunk *chunk_new(size_t size);
 

@@ -1,7 +1,8 @@
 #ifndef __FCGI_REQUEST__
 #define __FCGI_REQUEST__
 
-#include "MKPlugin.h"
+#include "mk_iov.h"
+
 #include "protocol.h"
 #include "chunk.h"
 
@@ -36,9 +37,13 @@ struct request_list {
 	struct request *rs;
 };
 
-int request_init(struct request *req, size_t iov_size);
+void request_module_init(void *(*mem_alloc_p)(const size_t),
+		void (*mem_free_p)(void *));
+
+int request_init(struct request *preq, size_t iov_n);
 
 int request_assign(struct request *req,
+	int fd,
 	struct client_session *cs,
 	struct session_request *sr);
 

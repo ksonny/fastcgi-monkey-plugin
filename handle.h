@@ -15,6 +15,9 @@ struct handle_list {
 	struct handle *fds;
 };
 
+void handle_module_init(void *(*mem_alloc_p)(const size_t),
+		void (*mem_free_p)(void *));
+
 int handle_list_init(struct handle_list *fdl, int n);
 
 void handle_list_free(struct handle_list *fdl);

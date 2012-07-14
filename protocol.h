@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "mk_memory.h"
+
 #define FCGI_MAX_LENGTH 0xffff
 #define FCGI_VERSION_1 1
 

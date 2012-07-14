@@ -1,15 +1,23 @@
-#include <stddef.h>
+#include <stdlib.h>
 
-#include "MKPlugin.h"
 #include "dbg.h"
-
 #include "chunk.h"
+
+static void *(*mem_alloc)(const size_t) = &malloc;
+static void (*mem_free)(void *) = &free;
+
+void chunk_module_init(void *(*mem_alloc_f)(const size_t),
+		void (*mem_free_f)(void *))
+{
+	mem_alloc = mem_alloc_f;
+	mem_free  = mem_free_f;
+}
 
 struct chunk *chunk_new(size_t size)
 {
 	struct chunk *tmp = NULL;
 
-	tmp = mk_api->mem_alloc(size);
+	tmp = mem_alloc(size);
 	check_mem(tmp);
 
 	mk_list_init(&tmp->_head);
@@ -21,7 +29,7 @@ struct chunk *chunk_new(size_t size)
 	return tmp;
 error:
 	if (tmp) {
-		mk_api->mem_free(tmp);
+		mem_free(tmp);
 	}
 	return NULL;
 }
@@ -73,7 +81,7 @@ error:
 void chunk_free(struct chunk *c)
 {
 	mk_list_del(&c->_head);
-	mk_api->mem_free(c);
+	mem_free(c);
 }
 
 void chunk_retain(struct chunk *c)
