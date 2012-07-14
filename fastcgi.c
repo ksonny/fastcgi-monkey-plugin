@@ -546,7 +546,7 @@ void _mkp_core_thctx(void)
 {
 	check(!request_list_init(&tdata.rl, mk_api->config->worker_capacity),
 		"Failed to init request list.");
-	check(!handle_list_init(&tdata.fdl, 10),
+	check(!handle_list_init(&tdata.fdl, 1),
 		"Failed to init fd list.");
 
 	chunk_list_init(&tdata.cm);
