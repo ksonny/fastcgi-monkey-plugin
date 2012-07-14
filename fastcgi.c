@@ -17,9 +17,12 @@ struct fcgi_server {
 	regex_t match_regex;
 	char   *addr;
 	int     port;
-	struct  chunk_list cm;
-	struct  request_list rl;
-	struct  handle_list fdl;
+};
+
+struct fcgi_thread_data {
+	struct chunk_list cm;
+	struct request_list rl;
+	struct handle_list fdl;
 };
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
@@ -28,6 +31,7 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
               MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX);	/* hooks */
 
 static struct fcgi_server server;
+static __thread struct fcgi_thread_data tdata;
 
 static int fcgi_validate_conf(void)
 {
@@ -251,15 +255,6 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 		"Validating struct sizes failed.");
 	check(!fcgi_conf(confdir),
 		"Failed to read config.");
-	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
-		"Failed to init request list.");
-	check(!handle_list_init(&server.fdl, 10),
-		"Failed to init fd list.");
-
-	chunk_list_init(&server.cm);
-
-	check(!request_list_init(&server.rl, mk_api->config->worker_capacity),
-		"Failed to init request list.");
 
 	ret = regcomp(&server.match_regex, "/fcgitest", REG_EXTENDED|REG_NOSUB);
 	check(!ret, "Regex failure.");
@@ -277,9 +272,6 @@ void _mkp_exit()
 {
 	regfree(&server.match_regex);
 	log_info("Exit module.");
-	chunk_list_free_chunks(&server.cm);
-	request_list_free(&server.rl);
-	handle_list_free(&server.fdl);
 }
 
 static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
@@ -306,7 +298,7 @@ int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 {
 	struct handle *fd;
 
-	fd = handle_list_get_by_state(&server.fdl, HANDLE_AVAILABLE);
+	fd = handle_list_get_by_state(&tdata.fdl, HANDLE_AVAILABLE);
 	check_debug(fd, "Max connection limit reached.");
 
 	fd->fd = mk_api->socket_connect(server.addr, server.port);
@@ -343,8 +335,8 @@ int fcgi_prepare_request(struct request *req)
 	int req_id = -1;
 	mk_pointer env = {0};
 
-	req_id = request_list_index_of(&server.rl, req);
-	check(req_id > 0 && req_id < server.rl.n,
+	req_id = request_list_index_of(&tdata.rl, req);
+	check(req_id > 0 && req_id < tdata.rl.n,
 		"Bad request id.");
 	env = fcgi_create_env(req->ccs, req->sr);
 
@@ -434,7 +426,7 @@ int fcgi_recv_response(struct handle *fd)
 	struct chunk *c;
 	struct chunk_ptr write = {0}, read = {0};
 
-	c = chunk_list_current(&server.cm);
+	c = chunk_list_current(&tdata.cm);
 	if (c != NULL) {
 		write = chunk_write_ptr(c);
 		read  = chunk_read_ptr(c);
@@ -445,7 +437,7 @@ int fcgi_recv_response(struct handle *fd)
 			PLUGIN_TRACE("New chunk, inherit %ld.", inherit);
 			c = chunk_new(65536);
 			check_mem(c);
-			check(!chunk_list_add(&server.cm, c, inherit),
+			check(!chunk_list_add(&tdata.cm, c, inherit),
 				"Failed to add chunk.");
 			write   = chunk_write_ptr(c);
 			inherit = 0;
@@ -475,7 +467,7 @@ int fcgi_recv_response(struct handle *fd)
 			fcgi_read_header(read.data, &h);
 			pkg_size = sizeof(h) + h.body_len + h.body_pad;
 
-			req = request_list_get(&server.rl, h.req_id);
+			req = request_list_get(&tdata.rl, h.req_id);
 			check(req, "Failed to get request %d.", h.req_id);
 
 			if (read.len < pkg_size) {
@@ -510,7 +502,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	char *url = NULL;
 	struct request *req = NULL;
 
-	req = request_list_get_by_fd(&server.rl, cs->socket);
+	req = request_list_get_by_fd(&tdata.rl, cs->socket);
 	if (req) {
 		if (req->state == REQ_ENDED) {
 			check(!fcgi_end_request(req),
@@ -529,7 +521,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	}
 	mk_api->mem_free(url);
 
-	req = request_list_get_available(&server.rl);
+	req = request_list_get_available(&tdata.rl);
 
 	check(req,
 		"Failed to find avaiable request struct.");
@@ -552,12 +544,23 @@ error:
 
 void _mkp_core_thctx(void)
 {
+	check(!request_list_init(&tdata.rl, mk_api->config->worker_capacity),
+		"Failed to init request list.");
+	check(!handle_list_init(&tdata.fdl, 10),
+		"Failed to init fd list.");
+
+	chunk_list_init(&tdata.cm);
+
+	return;
+error:
+	log_err("Failed to initiate thread context.");
+	abort();
 }
 
 static int hangup(int socket)
 {
 	struct handle *fd;
-	fd = handle_list_get_by_fd(&server.fdl, socket);
+	fd = handle_list_get_by_fd(&tdata.fdl, socket);
 
 	if (!fd)
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
@@ -576,12 +579,12 @@ int _mkp_event_write(int socket)
 	struct request *req = NULL;
 	struct handle *fd;
 
-	fd  = handle_list_get_by_fd(&server.fdl, socket);
+	fd  = handle_list_get_by_fd(&tdata.fdl, socket);
 
 	if (fd) {
 		check(fd->state == HANDLE_READY,
 			"[FD %d] Not ready.", fd->fd);
-		req = request_list_get_assigned(&server.rl);
+		req = request_list_get_assigned(&tdata.rl);
 		check_debug(req,
 			"[FD %d] No request available.", fd->fd);
 		check(!fcgi_send_request(req, fd),
@@ -608,7 +611,7 @@ error:
 int _mkp_event_read(int socket)
 {
 	struct handle *h;
-	h = handle_list_get_by_fd(&server.fdl, socket);
+	h = handle_list_get_by_fd(&tdata.fdl, socket);
 
 	if (!h)
 		return MK_PLUGIN_RET_EVENT_NEXT;
