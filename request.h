@@ -9,12 +9,12 @@
 #define MAX_PACKAGES 32
 
 enum request_state {
-	REQ_AVAILABLE,
-	REQ_ASSIGNED,
-	REQ_SENT,
-	REQ_STREAM_CLOSED,
-	REQ_ENDED,
-	REQ_FINISHED,
+	REQ_AVAILABLE     = 1,
+	REQ_ASSIGNED      = 2,
+	REQ_SENT          = 4,
+	REQ_STREAM_CLOSED = 8,
+	REQ_ENDED         = 16,
+	REQ_FINISHED      = 32,
 };
 
 enum request_flags {
@@ -62,9 +62,20 @@ void request_free(struct request *req);
 
 int request_list_init(struct request_list *rl, int n);
 
-struct request *request_list_get_available(struct request_list *rl);
+/*
+ * Gets next available request, starting from rl->clock_hand.
+ *
+ * Returns NULL on failure, otherwise pointer to struct request.
+ */
+struct request *request_list_next_available(struct request_list *rl);
 
-struct request *request_list_get_assigned(struct request_list *rl);
+/*
+ * Gets next assigned request, starting from .clock_hand. The clock_hand
+ * will then be set to index of found request.
+ *
+ * Returns NULL on failure, otherwise pointer to struct request.
+ */
+struct request *request_list_next_assigned(struct request_list *rl);
 
 struct request *request_list_get_by_fd(struct request_list *rl, int fd);
 

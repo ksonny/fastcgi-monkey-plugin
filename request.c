@@ -246,19 +246,7 @@ error:
 	return -1;
 }
 
-static struct request *request_list_get_by_state(struct request_list *rl,
-		enum request_state state)
-{
-	int i;
-	struct request *r = NULL;
 
-	for (i = 1; i < rl->n; i++) {
-		r = rl->rs + i;
-		if (r->state == state)
-			return r;
-	}
-	return NULL;
-}
 
 struct request *request_list_get_available(struct request_list *rl)
 {
