@@ -13,6 +13,41 @@ void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 	mem_free  = mem_free_p;
 }
 
+int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state)
+{
+	switch (state) {
+	case FCGI_FD_AVAILABLE:
+		check(fd->state & (FCGI_FD_CLOSING | FCGI_FD_SLEEPING),
+			"Bad state transition.");
+		break;
+	case FCGI_FD_READY:
+		check(fd->state & (FCGI_FD_AVAILABLE
+				| FCGI_FD_RECEIVING
+				| FCGI_FD_SLEEPING),
+			"Bad state transition.");
+		fd->state = FCGI_FD_READY;
+		break;
+	case FCGI_FD_RECEIVING:
+		check(fd->state & (FCGI_FD_READY),
+			"Bad state transition.");
+		fd->state = FCGI_FD_RECEIVING;
+		break;
+	case FCGI_FD_CLOSING:
+		check(fd->state & (FCGI_FD_RECEIVING),
+			"Bad state transition.");
+		fd->state = FCGI_FD_CLOSING;
+		break;
+	case FCGI_FD_SLEEPING:
+		check(fd->state & (FCGI_FD_READY),
+			"Bad state transition.");
+		fd->state = FCGI_FD_SLEEPING;
+		break;
+	}
+	return 0;
+error:
+	return -1;
+}
+
 int fcgi_fd_list_init(struct fcgi_fd_list *fdl, int n)
 {
 	struct fcgi_fd *tmp = NULL;

@@ -311,7 +311,7 @@ int fcgi_wake_connection()
 		mk_api->event_socket_change_mode(fd->fd,
 				MK_EPOLL_RW,
 				MK_EPOLL_LEVEL_TRIGGERED);
-		fd->state = FCGI_FD_READY;
+		fcgi_fd_set_state(fd, FCGI_FD_READY);
 	}
 	return 0;
 }
@@ -334,7 +334,7 @@ int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 			cs, sr,
 			MK_EPOLL_LEVEL_TRIGGERED);
 
-	fd->state = FCGI_FD_READY;
+	fcgi_fd_set_state(fd, FCGI_FD_READY);
 
 	return 0;
 error:
@@ -408,9 +408,8 @@ int fcgi_send_request(struct request *req, struct fcgi_fd *fd)
 {
 	check(mk_api->socket_sendv(fd->fd, &req->iov) > 0,
 		"Socket error occured.");
-	check(!request_set_state(req, REQ_SENT), "Failed to set req state.");
-	fd->state  = FCGI_FD_RECEIVING;
-
+	check(!request_set_state(req, REQ_SENT),
+		"Failed to set req state.");
 	request_release_chunks(req);
 	return 0;
 error:
@@ -488,7 +487,8 @@ static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
 				FCGI_PROTOCOL_STATUS_STR(b.protocol_status));
 		}
 
-		fd->state = FCGI_FD_READY;
+		check(!fcgi_fd_set_state(fd, FCGI_FD_READY),
+			"Failed to set fd state.");
 		check(!request_set_state(req, REQ_ENDED),
 			"Failed to set request state.");
 		break;
@@ -537,7 +537,8 @@ int fcgi_recv_response(struct fcgi_fd *fd)
 		ret = mk_api->socket_read(fd->fd, write.data, write.len);
 
 		if (ret == 0) {
-			fd->state = FCGI_FD_CLOSING;
+			check(!fcgi_fd_set_state(fd, FCGI_FD_CLOSING),
+				"Failed to set fd state.");
 			done = 1;
 		} else if (ret == -1) {
 			if (errno == EAGAIN) {
@@ -643,7 +644,7 @@ static int hangup(int socket)
 
 	if (fd) {
 		fd->fd    = -1;
-		fd->state = FCGI_FD_AVAILABLE;
+		fd->state =  FCGI_FD_AVAILABLE;
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	} else {
@@ -680,12 +681,14 @@ int _mkp_event_write(int socket)
 		if (req) {
 			check(!fcgi_send_request(req, fd),
 				"[FD %d] Failed to send request.", fd->fd);
-			fd->state = FCGI_FD_RECEIVING;
+			check(!fcgi_fd_set_state(fd, FCGI_FD_RECEIVING),
+				"Failed to set fd state.");
 		} else {
 			mk_api->event_socket_change_mode(fd->fd,
 				MK_EPOLL_SLEEP,
 				MK_EPOLL_LEVEL_TRIGGERED);
-			fd->state = FCGI_FD_SLEEPING;
+			check(!fcgi_fd_set_state(fd, FCGI_FD_SLEEPING),
+				"Failed to set fd state.");
 		}
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
