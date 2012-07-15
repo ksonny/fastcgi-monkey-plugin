@@ -114,10 +114,9 @@ int request_assign(struct request *req,
 	struct client_session *cs,
 	struct session_request *sr)
 {
-	check(req->state == REQ_AVAILABLE,
-		"Request state is not AVAILABLE.");
+	check_debug(!request_set_state(req, REQ_ASSIGNED),
+		"Failed to set request state.");
 
-	req->state = REQ_ASSIGNED;
 	req->fd    = fd;
 	req->ccs   = cs;
 	req->sr    = sr;
@@ -165,72 +164,19 @@ ssize_t request_add_pkg(struct request *req,
 		struct fcgi_header h,
 		struct chunk_ptr cp)
 {
-	size_t pkg_length;
-	struct fcgi_end_req_body b;
+	size_t pkg_length = sizeof(h) + h.body_len + h.body_pad;
 
-	pkg_length = sizeof(h) + h.body_len + h.body_pad;
 	check(cp.len >= pkg_length, "Missing package data.");
+	check(req->state == REQ_SENT, "Request not yet sent.");
+	check(h.type == FCGI_STDOUT, "Tried to add pkg of bad type.");
 
-	switch (h.type) {
-	case FCGI_STDERR:
-		if (h.body_len == 0) {
-		} else {
-		}
-		break;
+	chunk_retain(cp.parent);
+	req->cs[req->iov.iov_idx] = cp.parent;
 
-	case FCGI_STDOUT:
-		check(req->state == REQ_SENT, "Request not yet sent.");
-		if (h.body_len == 0) {
-			req->state = REQ_STREAM_CLOSED;
-			break;
-		}
-
-		chunk_retain(cp.parent);
-		req->cs[req->iov.iov_idx] = cp.parent;
-
-		request_iov_add_entry(&req->iov,
-				cp.data + sizeof(h),
-				h.body_len,
-				0);
-		break;
-
-	case FCGI_END_REQUEST:
-		check(req->state == REQ_STREAM_CLOSED,
-			"Stream not yet closed.");
-		fcgi_read_end_req_body(cp.data + sizeof(h), &b);
-
-		switch (b.app_status) {
-		case EXIT_SUCCESS:
-			break;
-		case EXIT_FAILURE:
-			break;
-		default:
-			break;
-		}
-
-		switch (b.protocol_status) {
-		case FCGI_REQUEST_COMPLETE:
-			break;
-		case FCGI_CANT_MPX_CONN:
-			break;
-		case FCGI_OVERLOADED:
-			break;
-		case FCGI_UNKNOWN_ROLE:
-			break;
-		default:
-			break;
-		}
-
-		req->state = REQ_ENDED;
-		break;
-
-	case 0:
-		sentinel("Received NULL package.");
-		break;
-	default:
-		log_info("Ignore package: %s",
-			FCGI_MSG_TYPE_STR(h.type));
-	}
+	request_iov_add_entry(&req->iov,
+			cp.data + sizeof(h),
+			h.body_len,
+			0);
 
 	return pkg_length;
 error:
