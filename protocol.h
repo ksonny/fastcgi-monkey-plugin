@@ -15,6 +15,12 @@
 #define FCGI_MSG_TYPE_STR(type) \
 	((type) < 11 ? fcgi_msg_type_str[(type)] : fcgi_msg_type_str[11])
 
+#define FCGI_ROLE_STR(role) \
+	((role) < 4 ? fcgi_role_str[(type)] : "UNKNOWN_ROLE")
+
+#define FCGI_PROTOCOL_STATUS_STR(status) \
+	((status) < 4 ? fcgi_protocol_status_str[(status)] : fcgi_protocol_status_str[3])
+
 enum fcgi_msg_type {
 	FCGI_BEGIN_REQUEST	= 1,
 	FCGI_ABORT_REQUEST	= 2,
@@ -70,6 +76,8 @@ struct fcgi_end_req_body {
 extern const char *fcgi_msg_type_str[];
 
 extern const char *fcgi_role_str[];
+
+extern const char *fcgi_protocol_status_str[];
 
 int
 fcgi_validate_struct_sizes(void);

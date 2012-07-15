@@ -25,6 +25,13 @@ const char *fcgi_role_str[] = {
 	[FCGI_FILTER]     = "FCGI_FILTER",
 };
 
+const char *fcgi_protocol_status_str[] = {
+	[FCGI_REQUEST_COMPLETE] = "FCGI_REQUEST_COMPLETE",
+	[FCGI_CANT_MPX_CONN]    = "FCGI_CANT_MPX_CONN",
+	[FCGI_OVERLOADED]       = "FCGI_OVERLOADED",
+	[FCGI_UNKNOWN_ROLE]     = "FCGI_UNKNOWN_ROLE",
+};
+
 int fcgi_validate_struct_sizes(void)
 {
 	struct fcgi_header header;
