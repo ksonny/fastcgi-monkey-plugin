@@ -6,6 +6,7 @@ enum fcgi_fd_state {
 	FCGI_FD_READY,
 	FCGI_FD_RECEIVING,
 	FCGI_FD_CLOSING,
+	FCGI_FD_SLEEPING,
 };
 
 struct fcgi_fd {

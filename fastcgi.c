@@ -292,6 +292,29 @@ static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
 	}
 	return cnt;
 }
+/**
+ * Will return 0 if there are any connections available to handle a
+ * request. If such a connection is sleeping, wake it.
+ */
+int fcgi_wake_connection()
+{
+	struct fcgi_fd *fd;
+
+	fd = fcgi_fd_list_get_by_state(&tdata.fdl,
+			FCGI_FD_SLEEPING | FCGI_FD_READY);
+	if (!fd) {
+		return -1;
+	}
+	if (fd->state == FCGI_FD_SLEEPING) {
+
+		debug("[FD %d] Wakeup received.", fd->fd);
+		mk_api->event_socket_change_mode(fd->fd,
+				MK_EPOLL_WRITE,
+				MK_EPOLL_LEVEL_TRIGGERED);
+		fd->state = FCGI_FD_READY;
+	}
+	return 0;
+}
 
 int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 		struct session_request *sr)
@@ -595,7 +618,9 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	check(!fcgi_prepare_request(req),
 		"Failed to prepare request.");
 
-	fcgi_new_connection(plugin, cs, sr);
+	if (fcgi_wake_connection()) {
+		fcgi_new_connection(plugin, cs, sr);
+	}
 
 	return MK_PLUGIN_RET_CONTINUE;
 error:
@@ -644,26 +669,34 @@ int _mkp_event_write(int socket)
 	struct request *req = NULL;
 	struct handle *fd;
 
-	fd  = handle_list_get_by_fd(&tdata.fdl, socket);
+	fd = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
+	if (!fd) {
+		return MK_PLUGIN_RET_EVENT_CONTINUE;
+	}
 
-	if (fd) {
-		check(fd->state == HANDLE_READY,
-			"[FD %d] Not ready.", fd->fd);
-		req = request_list_get_assigned(&tdata.rl);
-		check_debug(req,
-			"[FD %d] No request available.", fd->fd);
+	check(fd->state == FCGI_FD_READY,
+		"[FD %d] Not ready.", fd->fd);
+	req = request_list_get_assigned(&tdata.rl);
+
+	if (!req) {
+		debug("[FD %d] No assigned requests, sleep.",
+			fd->fd);
+
+		fd->state = FCGI_FD_SLEEPING;
+		mk_api->event_socket_change_mode(fd->fd,
+			MK_EPOLL_SLEEP,
+			MK_EPOLL_EDGE_TRIGGERED);
+	} else {
 		check(!fcgi_send_request(req, fd),
 			"[FD %d] Failed to send request.", fd->fd);
 
+		fd->state = FCGI_FD_RECEIVING;
 		mk_api->event_socket_change_mode(fd->fd,
 			MK_EPOLL_READ,
 			MK_EPOLL_LEVEL_TRIGGERED);
-		fd->state = HANDLE_RECEIVING;
 
-		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
-
-	return MK_PLUGIN_RET_EVENT_CONTINUE;
+	return MK_PLUGIN_RET_EVENT_OWNED;
 error:
 	if (req) {
 		mk_api->header_set_http_status(req->sr,
