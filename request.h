@@ -15,6 +15,7 @@ enum request_state {
 	REQ_STREAM_CLOSED = 8,
 	REQ_ENDED         = 16,
 	REQ_FINISHED      = 32,
+	REQ_FAILED        = 64,
 };
 
 enum request_flags {

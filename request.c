@@ -98,7 +98,8 @@ int request_set_state(struct request *req, enum request_state state)
 		req->state = REQ_STREAM_CLOSED;
 		break;
 	case REQ_ENDED:
-		check(req->state == REQ_STREAM_CLOSED,
+		check(req->state == REQ_STREAM_CLOSED ||
+			req->state == REQ_FAILED,
 			"Bad state transition REQ_ENDED.");
 		req->state = REQ_ENDED;
 		break;
@@ -106,6 +107,9 @@ int request_set_state(struct request *req, enum request_state state)
 		check(req->state == REQ_ENDED,
 			"Bad state transition REQ_FINISHED.");
 		req->state = REQ_FINISHED;
+		break;
+	case REQ_FAILED:
+		req->state = REQ_FAILED;
 		break;
 	default:
 		sentinel("Tried to set unknown request state.");
@@ -139,8 +143,8 @@ void request_set_fcgi_fd(struct request *req, int fcgi_fd)
 
 int request_recycle(struct request *req)
 {
-	if (req->state != REQ_FINISHED) {
-		log_warn("Recycling un-finished request.");
+	if (!(req->state & (REQ_FINISHED | REQ_FAILED))) {
+		log_warn("Recycling still running request.");
 	}
 
 	request_release_chunks(req);

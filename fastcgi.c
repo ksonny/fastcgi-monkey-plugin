@@ -517,10 +517,16 @@ static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
 
 		check(!fcgi_fd_set_state(fd, FCGI_FD_READY),
 			"Failed to set fd state.");
-		check(!request_set_state(req, REQ_ENDED),
-			"Failed to set request state.");
-		break;
 
+		if (req->state == REQ_STREAM_CLOSED) {
+			check(!request_set_state(req, REQ_ENDED),
+				"Failed to set request state.");
+		}
+		else if (req->state == REQ_FAILED && req->fd == -1) {
+			request_recycle(req);
+		}
+
+		break;
 	case 0:
 		sentinel("[REQ %d] Received NULL package.", h.req_id);
 		break;
@@ -667,6 +673,10 @@ error:
 	PLUGIN_TRACE("[FD %d] Connection has failed.", cs->socket);
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	sr->close_now = MK_TRUE;
+	if (req) {
+		PLUGIN_TRACE("[REQ_ID %d] Request failed in stage_30.", req_id);
+		request_set_state(req, REQ_FAILED);
+	}
 	return MK_PLUGIN_RET_CLOSE_CONX;
 }
 
@@ -689,18 +699,43 @@ error:
 static int hangup(int socket)
 {
 	struct fcgi_fd *fd;
+	struct request *req;
+	int req_id;
 
-	fd = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
+	fd  = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
+	req = fd ? NULL : request_list_get_by_fd(&tdata.rl, socket);
 
-	if (fd) {
+	if (!fd && !req) {
+		return MK_PLUGIN_RET_EVENT_NEXT;
+	}
+	else if (fd) {
 		PLUGIN_TRACE("[FCGI_FD %d] Hangup event received.", fd->fd);
 
 		fd->fd     = -1;
 		fd->req_id = 0;
 		fd->state  = FCGI_FD_AVAILABLE;
+		return MK_PLUGIN_RET_EVENT_CONTINUE;
+	}
+	else if (req) {
+		req_id = request_list_index_of(&tdata.rl, req);
 
-		return MK_PLUGIN_RET_EVENT_OWNED;
-	} else {
+		if (req->fcgi_fd == -1) {
+			PLUGIN_TRACE("[REQ_ID %d] Hangup event.", req_id);
+			request_recycle(req);
+		}
+		else {
+			log_warn("[REQ_ID %d] Hangup event, request still running.",
+				req_id);
+			if (req->state != REQ_FAILED) {
+				request_set_state(req, REQ_FAILED);
+			}
+			req->fd  = -1;
+			req->ccs = NULL;
+			req->sr  = NULL;
+		}
+		return MK_PLUGIN_RET_EVENT_CONTINUE;
+	}
+	else {
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
 }
@@ -760,13 +795,27 @@ int _mkp_event_write(int socket)
 		}
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
+	else if (fd && fd->state == FCGI_FD_RECEIVING) {
 
-	return MK_PLUGIN_RET_EVENT_CONTINUE;
+		req = request_list_get(&tdata.rl, fd->req_id);
+
+		if (req && req->state == REQ_FAILED) {
+			log_info("[FD %d] We have failed request!", req->fd);
+
+			request_release_chunks(req);
+
+			fcgi_fd_set_req_id(fd, 0);
+			check(!fcgi_send_abort_request(req, fd),
+				"[FD %d] Failed to send abort request.", fd->fd);
+		}
+		return MK_PLUGIN_RET_EVENT_OWNED;
+	}
+	else {
+		return MK_PLUGIN_RET_EVENT_CONTINUE;
+	}
 error:
 	if (req) {
-		mk_api->header_set_http_status(req->sr,
-			MK_SERVER_INTERNAL_ERROR);
-		req->sr->close_now = MK_TRUE;
+		request_set_state(req, REQ_FAILED);
 	}
 	return MK_PLUGIN_RET_EVENT_CLOSE;
 }
@@ -790,7 +839,8 @@ int _mkp_event_read(int socket)
 		PLUGIN_TRACE("[FCGI_FD %d] Data received.", fd->fd);
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
-	} else {
+	}
+	else {
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
 error:
