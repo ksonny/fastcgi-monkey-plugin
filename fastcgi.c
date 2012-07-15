@@ -359,9 +359,8 @@ int fcgi_prepare_request(struct request *req)
 	mk_pointer env = {0};
 
 	req_id = request_list_index_of(&tdata.rl, req);
-	check(req_id > 0 && req_id < tdata.rl.n,
-		"Bad request id.");
-	env = fcgi_create_env(req->ccs, req->sr);
+	check(req_id > 0, "Bad request id: %d.", req_id);
+	env    = fcgi_create_env(req->ccs, req->sr);
 
 	check(req_id != -1, "Could not get index of request.");
 
@@ -601,7 +600,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	}
 	mk_api->mem_free(url);
 
-	req = request_list_get_available(&tdata.rl);
+	req = request_list_next_available(&tdata.rl);
 
 	check(req,
 		"Failed to find avaiable request struct.");
@@ -623,7 +622,7 @@ error:
 
 void _mkp_core_thctx(void)
 {
-	check(!request_list_init(&tdata.rl, mk_api->config->worker_capacity),
+	check(!request_list_init(&tdata.rl, 1, mk_api->config->worker_capacity),
 		"Failed to init request list.");
 	check(!fcgi_fd_list_init(&tdata.fdl, 1),
 		"Failed to init fd list.");

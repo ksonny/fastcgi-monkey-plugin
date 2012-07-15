@@ -218,7 +218,7 @@ void request_free(struct request *req)
 	}
 }
 
-int request_list_init(struct request_list *rl, int n)
+int request_list_init(struct request_list *rl, int id_offset, int n)
 {
 	struct request *tmp = NULL;
 	int i;
@@ -232,6 +232,7 @@ int request_list_init(struct request_list *rl, int n)
 	}
 
 	rl->n          = n;
+	rl->id_offset  = id_offset;
 	rl->clock_hand = 0;
 	rl->rs         = tmp;
 
@@ -293,9 +294,13 @@ struct request *request_list_get_by_fd(struct request_list *rl, int fd)
 
 struct request *request_list_get(struct request_list *rl, uint16_t req_id)
 {
-	check(req_id < rl->n, "Request id out of range.");
+	int real_req_index = req_id - rl->id_offset;
+	check(req_id > 0,
+		"Request id out of range.");
+	check(real_req_index >= 0 && real_req_index < rl->n,
+		"Request id out of range.");
 
-	return rl->rs + req_id;
+	return rl->rs + real_req_index;
 error:
 	return NULL;
 }
@@ -306,7 +311,7 @@ int request_list_index_of(struct request_list *rl, struct request *r)
 
 	check(r >= rl->rs && r <= rl->rs + rl->n, "Request not part of list.");
 
-	return offset;
+	return rl->id_offset + offset;
 error:
 	return -1;
 

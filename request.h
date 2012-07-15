@@ -32,8 +32,14 @@ struct request {
 	struct mk_iov iov;
 };
 
+/** struct request_list - tracks list of requests
+ * @n: Number of entries in list.
+ * @id_offset: Substracted from req_id to get index in list.
+ * @clock_hand: Used with _next_ function to implement round robin.
+ */
 struct request_list {
 	int n;
+	int id_offset;
 	int clock_hand;
 	struct request *rs;
 };
@@ -61,7 +67,7 @@ void request_release_chunks(struct request *req);
 void request_free(struct request *req);
 
 
-int request_list_init(struct request_list *rl, int n);
+int request_list_init(struct request_list *rl, int n, int id_offset);
 
 /*
  * Gets next available request, starting from rl->clock_hand.
