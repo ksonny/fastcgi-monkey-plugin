@@ -1,21 +1,21 @@
 #include <stdlib.h>
 
 #include "dbg.h"
-#include "handle.h"
+#include "fcgi_fd.h"
 
 static void *(*mem_alloc)(const size_t) = &malloc;
 static void (*mem_free)(void *) = free;
 
-void handle_module_init(void *(*mem_alloc_p)(const size_t),
+void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *))
 {
 	mem_alloc = mem_alloc_p;
 	mem_free  = mem_free_p;
 }
 
-int handle_list_init(struct handle_list *fdl, int n)
+int fcgi_fd_list_init(struct fcgi_fd_list *fdl, int n)
 {
-	struct handle *tmp = NULL;
+	struct fcgi_fd *tmp = NULL;
 	int i;
 
 	tmp = mem_alloc(n * sizeof(*tmp));
@@ -23,7 +23,7 @@ int handle_list_init(struct handle_list *fdl, int n)
 
 	for (i = 0; i < n; i++) {
 		tmp[i].fd = -1;
-		tmp[i].state = HANDLE_AVAILABLE;
+		tmp[i].state = FCGI_FD_AVAILABLE;
 	}
 
 	fdl->n   = n;
@@ -35,13 +35,13 @@ error:
 	return -1;
 }
 
-void handle_list_free(struct handle_list *fdl)
+void fcgi_fd_list_free(struct fcgi_fd_list *fdl)
 {
 	mem_free(fdl->fds);
 }
 
-struct handle *handle_list_get_by_state(struct handle_list *fdl,
-		enum handle_state state)
+struct fcgi_fd *fcgi_fd_list_get_by_state(struct fcgi_fd_list *fdl,
+		enum fcgi_fd_state state)
 {
 	int i;
 
@@ -53,7 +53,7 @@ struct handle *handle_list_get_by_state(struct handle_list *fdl,
 	return NULL;
 }
 
-struct handle *handle_list_get_by_fd(struct handle_list *fdl, int fd)
+struct fcgi_fd *fcgi_fd_list_get_by_fd(struct fcgi_fd_list *fdl, int fd)
 {
 	int i;
 

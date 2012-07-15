@@ -7,7 +7,7 @@
 #include "MKPlugin.h"
 
 #include "dbg.h"
-#include "handle.h"
+#include "fcgi_fd.h"
 #include "protocol.h"
 #include "chunk.h"
 #include "request.h"
@@ -22,7 +22,7 @@ struct fcgi_server {
 struct fcgi_thread_data {
 	struct chunk_list cm;
 	struct request_list rl;
-	struct handle_list fdl;
+	struct fcgi_fd_list fdl;
 };
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
@@ -249,7 +249,7 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 
 	chunk_module_init(mk_api->mem_alloc, mk_api->mem_free);
 	request_module_init(mk_api->mem_alloc, mk_api->mem_free);
-	handle_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	fcgi_fd_module_init(mk_api->mem_alloc, mk_api->mem_free);
 
 	check(!fcgi_validate_struct_sizes(),
 		"Validating struct sizes failed.");
@@ -296,9 +296,9 @@ static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
 int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 		struct session_request *sr)
 {
-	struct handle *fd;
+	struct fcgi_fd *fd;
 
-	fd = handle_list_get_by_state(&tdata.fdl, HANDLE_AVAILABLE);
+	fd = fcgi_fd_list_get_by_state(&tdata.fdl, FCGI_FD_AVAILABLE);
 	check_debug(fd, "Max connection limit reached.");
 
 	fd->fd = mk_api->socket_connect(server.addr, server.port);
@@ -311,7 +311,7 @@ int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 			cs, sr,
 			MK_EPOLL_LEVEL_TRIGGERED);
 
-	fd->state = HANDLE_READY;
+	fd->state = FCGI_FD_READY;
 
 	return 0;
 error:
@@ -381,12 +381,12 @@ error:
 	return -1;
 }
 
-int fcgi_send_request(struct request *req, struct handle *fd)
+int fcgi_send_request(struct request *req, struct fcgi_fd *fd)
 {
 	check(mk_api->socket_sendv(fd->fd, &req->iov) > 0,
 		"Socket error occured.");
 	req->state = REQ_SENT;
-	fd->state  = HANDLE_RECEIVING;
+	fd->state  = FCGI_FD_RECEIVING;
 
 	request_release_chunks(req);
 	return 0;
@@ -415,7 +415,7 @@ int fcgi_end_request(struct request *req)
 	return 0;
 }
 
-int fcgi_recv_response(struct handle *fd)
+int fcgi_recv_response(struct fcgi_fd *fd)
 {
 	size_t pkg_size, inherit = 0;
 	ssize_t ret = 0;
@@ -446,7 +446,7 @@ int fcgi_recv_response(struct handle *fd)
 		ret = mk_api->socket_read(fd->fd, write.data, write.len);
 
 		if (ret == 0) {
-			fd->state = HANDLE_CLOSING;
+			fd->state = FCGI_FD_CLOSING;
 			done = 1;
 		} else if (ret == -1) {
 			if (errno == EAGAIN) {
@@ -475,7 +475,7 @@ int fcgi_recv_response(struct handle *fd)
 				ret     = inherit;
 			} else {
 				if (h.type == FCGI_END_REQUEST) {
-					fd->state = HANDLE_READY;
+					fd->state = FCGI_FD_READY;
 				}
 				ret = request_add_pkg(req, h, read);
 				check_debug(ret > 0, "Failed to add pkg.");
@@ -546,7 +546,7 @@ void _mkp_core_thctx(void)
 {
 	check(!request_list_init(&tdata.rl, mk_api->config->worker_capacity),
 		"Failed to init request list.");
-	check(!handle_list_init(&tdata.fdl, 1),
+	check(!fcgi_fd_list_init(&tdata.fdl, 1),
 		"Failed to init fd list.");
 
 	chunk_list_init(&tdata.cm);
@@ -559,8 +559,8 @@ error:
 
 static int hangup(int socket)
 {
-	struct handle *fd;
-	fd = handle_list_get_by_fd(&tdata.fdl, socket);
+	struct fcgi_fd *fd;
+	fd = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
 
 	if (!fd)
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
@@ -569,7 +569,7 @@ static int hangup(int socket)
 	mk_api->socket_close(fd->fd);
 
 	fd->fd    = -1;
-	fd->state = HANDLE_AVAILABLE;
+	fd->state = FCGI_FD_AVAILABLE;
 
 	return MK_PLUGIN_RET_EVENT_OWNED;
 }
@@ -596,7 +596,6 @@ int _mkp_event_write(int socket)
 		fd->state = HANDLE_RECEIVING;
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
-
 	}
 
 	return MK_PLUGIN_RET_EVENT_CONTINUE;
@@ -610,15 +609,15 @@ error:
 
 int _mkp_event_read(int socket)
 {
-	struct handle *h;
-	h = handle_list_get_by_fd(&tdata.fdl, socket);
+	struct fcgi_fd *h;
+	h = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
 
 	if (!h)
 		return MK_PLUGIN_RET_EVENT_NEXT;
 
 	check(!fcgi_recv_response(h),
 		"[FD %d] Failed to receive response.", h->fd);
-	check_debug(h->state != HANDLE_CLOSING,
+	check_debug(h->state != FCGI_FD_CLOSING,
 		"[FD %d] Closing connection.", h->fd);
 
 	mk_api->event_socket_change_mode(h->fd,
