@@ -309,7 +309,7 @@ int fcgi_wake_connection()
 
 		debug("[FD %d] Wakeup received.", fd->fd);
 		mk_api->event_socket_change_mode(fd->fd,
-				MK_EPOLL_WRITE,
+				MK_EPOLL_RW,
 				MK_EPOLL_LEVEL_TRIGGERED);
 		fd->state = FCGI_FD_READY;
 	}
@@ -329,7 +329,7 @@ int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 
 	mk_api->socket_set_nonblocking(fd->fd);
 	mk_api->event_add(fd->fd,
-			MK_EPOLL_WRITE,
+			MK_EPOLL_RW,
 			plugin,
 			cs, sr,
 			MK_EPOLL_LEVEL_TRIGGERED);
@@ -589,15 +589,6 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	req = request_list_get_by_fd(&tdata.rl, cs->socket);
 	if (req) {
-		if (req->state == REQ_ENDED) {
-			check(!fcgi_end_request(req),
-				"Failed to end request.");
-			check(!request_set_state(req, REQ_FINISHED),
-				"Failed to perform state transition.");
-			check(!request_set_state(req, REQ_AVAILABLE),
-				"Failed to perform state transition.");
-			return MK_PLUGIN_RET_END;
-		}
 		return MK_PLUGIN_RET_CONTINUE;
 	}
 
@@ -624,9 +615,6 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	return MK_PLUGIN_RET_CONTINUE;
 error:
-	if (req) {
-		request_recycle(req);
-	}
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
 	sr->close_now = MK_TRUE;
 	return MK_PLUGIN_RET_CLOSE_CONX;
@@ -650,91 +638,95 @@ error:
 static int hangup(int socket)
 {
 	struct fcgi_fd *fd;
+
 	fd = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
 
-	if (!fd)
+	if (fd) {
+		fd->fd    = -1;
+		fd->state = FCGI_FD_AVAILABLE;
+
+		return MK_PLUGIN_RET_EVENT_OWNED;
+	} else {
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
+	}
 
-	mk_api->event_del(fd->fd);
-	mk_api->socket_close(fd->fd);
-
-	fd->fd    = -1;
-	fd->state = FCGI_FD_AVAILABLE;
-
-	return MK_PLUGIN_RET_EVENT_OWNED;
 }
 
 int _mkp_event_write(int socket)
 {
 	struct request *req = NULL;
-	struct handle *fd;
+	struct fcgi_fd *fd;
 
-	fd = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
-	if (!fd) {
-		return MK_PLUGIN_RET_EVENT_CONTINUE;
+	fd  = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
+	req = fd ? NULL : request_list_get_by_fd(&tdata.rl, socket);
+
+	if (!fd && !req) {
+		return MK_PLUGIN_RET_EVENT_NEXT;
+	}
+	else if (req && req->state == REQ_ENDED) {
+
+		check(!fcgi_end_request(req),
+			"Failed to end request.");
+		check(!request_set_state(req, REQ_FINISHED),
+			"Request state transition failed.");
+
+		request_recycle(req);
+		mk_api->http_request_end(socket);
+
+		return MK_PLUGIN_RET_EVENT_OWNED;
+	}
+	else if (fd && fd->state == FCGI_FD_READY) {
+		req = request_list_get_assigned(&tdata.rl);
+		if (req) {
+			check(!fcgi_send_request(req, fd),
+				"[FD %d] Failed to send request.", fd->fd);
+			fd->state = FCGI_FD_RECEIVING;
+		} else {
+			mk_api->event_socket_change_mode(fd->fd,
+				MK_EPOLL_SLEEP,
+				MK_EPOLL_LEVEL_TRIGGERED);
+			fd->state = FCGI_FD_SLEEPING;
+		}
+		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
 
-	check(fd->state == FCGI_FD_READY,
-		"[FD %d] Not ready.", fd->fd);
-	req = request_list_get_assigned(&tdata.rl);
-
-	if (!req) {
-		debug("[FD %d] No assigned requests, sleep.",
-			fd->fd);
-
-		fd->state = FCGI_FD_SLEEPING;
-		mk_api->event_socket_change_mode(fd->fd,
-			MK_EPOLL_SLEEP,
-			MK_EPOLL_EDGE_TRIGGERED);
-	} else {
-		check(!fcgi_send_request(req, fd),
-			"[FD %d] Failed to send request.", fd->fd);
-
-		fd->state = FCGI_FD_RECEIVING;
-		mk_api->event_socket_change_mode(fd->fd,
-			MK_EPOLL_READ,
-			MK_EPOLL_LEVEL_TRIGGERED);
-
-	}
-	return MK_PLUGIN_RET_EVENT_OWNED;
+	return MK_PLUGIN_RET_EVENT_CONTINUE;
 error:
 	if (req) {
 		mk_api->header_set_http_status(req->sr,
 			MK_SERVER_INTERNAL_ERROR);
+		req->sr->close_now = MK_TRUE;
 	}
 	return MK_PLUGIN_RET_EVENT_CLOSE;
 }
 
 int _mkp_event_read(int socket)
 {
-	struct fcgi_fd *h;
-	h = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
+	struct fcgi_fd *fd;
 
-	if (!h)
+	fd = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
+	if (!fd)
 		return MK_PLUGIN_RET_EVENT_NEXT;
 
-	check(!fcgi_recv_response(h),
-		"[FD %d] Failed to receive response.", h->fd);
-	check_debug(h->state != FCGI_FD_CLOSING,
-		"[FD %d] Closing connection.", h->fd);
-
-	if (h->state == FCGI_FD_READY) {
-		mk_api->event_socket_change_mode(h->fd,
-				MK_EPOLL_WRITE,
-				MK_EPOLL_LEVEL_TRIGGERED);
+	if (fd->state == FCGI_FD_RECEIVING) {
+		check(!fcgi_recv_response(fd),
+			"[FD %d] Failed to receive response.", socket);
+		check_debug(fd->state != FCGI_FD_CLOSING,
+			"[FD %d] Closing connection.", socket);
+		return MK_PLUGIN_RET_EVENT_OWNED;
+	} else {
+		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
-
-	return MK_PLUGIN_RET_EVENT_OWNED;
 error:
 	return MK_PLUGIN_RET_EVENT_CLOSE;
 }
 
-int _mkp_event_close(int fd)
+int _mkp_event_close(int socket)
 {
-	return hangup(fd);
+	return hangup(socket);
 }
 
-int _mkp_event_error(int fd)
+int _mkp_event_error(int socket)
 {
-	return hangup(fd);
+	return hangup(socket);
 }
