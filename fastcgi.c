@@ -413,6 +413,77 @@ int fcgi_end_request(struct request *req)
 	return 0;
 }
 
+static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
+		struct fcgi_header h,
+		struct chunk_ptr read)
+{
+	struct fcgi_end_req_body b;
+	struct request *req;
+
+	size_t pkg_size = sizeof(h) + h.body_len + h.body_pad;
+
+	req = request_list_get(&tdata.rl, h.req_id);
+	check(req, "Failed to get request %d.", h.req_id);
+
+	switch (h.type) {
+	case FCGI_STDERR:
+		log_warn("[REQ %d] Received stderr.", h.req_id);
+		break;
+
+	case FCGI_STDOUT:
+		if (h.body_len == 0) {
+			check(!request_set_state(req, REQ_STREAM_CLOSED),
+				"Failed to set request state.");
+			break;
+		}
+		check(request_add_pkg(req, h, read) > 0,
+			"[REQ %d] Failed to add pkg.",
+			h.req_id);
+		break;
+
+	case FCGI_END_REQUEST:
+		fcgi_read_end_req_body(read.data + sizeof(h), &b);
+
+		switch (b.app_status) {
+		case EXIT_SUCCESS:
+			break;
+		case EXIT_FAILURE:
+			log_warn("[REQ %d] Application exit failure.",
+				h.req_id);
+			break;
+		}
+
+		switch (b.protocol_status) {
+		case FCGI_REQUEST_COMPLETE:
+			break;
+		case FCGI_CANT_MPX_CONN:
+		case FCGI_OVERLOADED:
+		case FCGI_UNKNOWN_ROLE:
+		default:
+			log_warn("[REQ %d] Protocol status: %s",
+				h.req_id,
+				FCGI_PROTOCOL_STATUS_STR(b.protocol_status));
+		}
+
+		fd->state = FCGI_FD_READY;
+		check(!request_set_state(req, REQ_ENDED),
+			"Failed to set request state.");
+		break;
+
+	case 0:
+		sentinel("[REQ %d] Received NULL package.", h.req_id);
+		break;
+	default:
+		log_info("[REQ %d] Ignore package: %s",
+			h.req_id,
+			FCGI_MSG_TYPE_STR(h.type));
+	}
+
+	return pkg_size;
+error:
+	return -1;
+}
+
 int fcgi_recv_response(struct fcgi_fd *fd)
 {
 	size_t pkg_size, inherit = 0;
@@ -420,7 +491,6 @@ int fcgi_recv_response(struct fcgi_fd *fd)
 	int done = 0;
 
 	struct fcgi_header h;
-	struct request *req;
 	struct chunk *c;
 	struct chunk_ptr write = {0}, read = {0};
 
@@ -465,18 +535,12 @@ int fcgi_recv_response(struct fcgi_fd *fd)
 			fcgi_read_header(read.data, &h);
 			pkg_size = sizeof(h) + h.body_len + h.body_pad;
 
-			req = request_list_get(&tdata.rl, h.req_id);
-			check(req, "Failed to get request %d.", h.req_id);
-
 			if (read.len < pkg_size) {
 				inherit = read.len;
 				ret     = inherit;
 			} else {
-				if (h.type == FCGI_END_REQUEST) {
-					fd->state = FCGI_FD_READY;
-				}
-				ret = request_add_pkg(req, h, read);
-				check_debug(ret > 0, "Failed to add pkg.");
+				ret = fcgi_handle_pkg(fd, h, read);
+				check(ret > 0, "Failed to handle pkg.");
 			}
 
 			read.data += ret;
