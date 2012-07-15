@@ -419,6 +419,29 @@ error:
 	return -1;
 }
 
+int fcgi_send_abort_request(struct request *req, struct fcgi_fd *fd)
+{
+	struct fcgi_header h = {
+		.version  = FCGI_VERSION_1,
+		.type     = FCGI_ABORT_REQUEST,
+		.req_id   = request_list_index_of(&tdata.rl, req),
+		.body_len = 0,
+		.body_pad = 0,
+	};
+	uint8_t buf[sizeof(h)];
+	ssize_t ret;
+
+	check(h.req_id > 0, "Bad request id: %d.", h.req_id);
+	fcgi_write_header(buf, &h);
+
+	ret = mk_api->socket_send(fd->fd, buf, sizeof(h));
+	check(ret != -1, "Socket error.");
+
+	return 0;
+error:
+	return -1;
+}
+
 int fcgi_end_request(struct request *req)
 {
 	ssize_t headers_offset;
