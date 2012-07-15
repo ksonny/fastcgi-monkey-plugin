@@ -46,7 +46,7 @@ struct fcgi_fd *fcgi_fd_list_get_by_state(struct fcgi_fd_list *fdl,
 	int i;
 
 	for (i = 0; i < fdl->n; i++) {
-		if (fdl->fds[i].state == state) {
+		if (fdl->fds[i].state & state) {
 			return fdl->fds + i;
 		}
 	}

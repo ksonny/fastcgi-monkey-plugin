@@ -2,11 +2,11 @@
 #define __FCGI_FD__
 
 enum fcgi_fd_state {
-	FCGI_FD_AVAILABLE,
-	FCGI_FD_READY,
-	FCGI_FD_RECEIVING,
-	FCGI_FD_CLOSING,
-	FCGI_FD_SLEEPING,
+	FCGI_FD_AVAILABLE = 1,
+	FCGI_FD_READY     = 2,
+	FCGI_FD_RECEIVING = 4,
+	FCGI_FD_CLOSING   = 8,
+	FCGI_FD_SLEEPING  = 16,
 };
 
 struct fcgi_fd {
