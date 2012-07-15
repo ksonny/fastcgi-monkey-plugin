@@ -66,6 +66,49 @@ static void request_reset(struct request *req)
 	req->iov.total_len = 0;
 }
 
+int request_set_state(struct request *req, enum request_state state)
+{
+	switch (state) {
+	case REQ_AVAILABLE:
+		check(req->state == REQ_FINISHED,
+			"Bad state transition to REQ_AVAILABLE.");
+		request_reset(req);
+		break;
+	case REQ_ASSIGNED:
+		check(req->state == REQ_AVAILABLE ||
+			req->state == REQ_FINISHED,
+			"Bad state transition to REQ_ASSIGNED.");
+		req->state = REQ_ASSIGNED;
+		break;
+	case REQ_SENT:
+		check(req->state == REQ_ASSIGNED,
+			"Bad state transition to REQ_SENT.");
+		req->state = REQ_SENT;
+		break;
+	case REQ_STREAM_CLOSED:
+		check(req->state == REQ_SENT,
+			"Bad state transition to REQ_STREAM_CLOSED.");
+		req->state = REQ_STREAM_CLOSED;
+		break;
+	case REQ_ENDED:
+		check(req->state == REQ_STREAM_CLOSED,
+			"Bad state transition REQ_ENDED.");
+		req->state = REQ_ENDED;
+		break;
+	case REQ_FINISHED:
+		check(req->state == REQ_ENDED,
+			"Bad state transition REQ_FINISHED.");
+		req->state = REQ_FINISHED;
+		break;
+	default:
+		sentinel("Tried to set unknown request state.");
+	};
+	return 0;
+error:
+	return -1;
+}
+
+
 int request_assign(struct request *req,
 	int fd,
 	struct client_session *cs,

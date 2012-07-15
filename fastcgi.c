@@ -385,7 +385,7 @@ int fcgi_send_request(struct request *req, struct fcgi_fd *fd)
 {
 	check(mk_api->socket_sendv(fd->fd, &req->iov) > 0,
 		"Socket error occured.");
-	req->state = REQ_SENT;
+	check(!request_set_state(req, REQ_SENT), "Failed to set req state.");
 	fd->state  = FCGI_FD_RECEIVING;
 
 	request_release_chunks(req);
@@ -408,8 +408,6 @@ int fcgi_end_request(struct request *req)
 
 	mk_api->header_send(req->fd, req->ccs, req->sr);
 	mk_api->socket_sendv(req->fd, &req->iov);
-
-	req->state = REQ_FINISHED;
 
 	request_release_chunks(req);
 	return 0;
@@ -507,7 +505,10 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		if (req->state == REQ_ENDED) {
 			check(!fcgi_end_request(req),
 				"Failed to end request.");
-			request_recycle(req);
+			check(!request_set_state(req, REQ_FINISHED),
+				"Failed to perform state transition.");
+			check(!request_set_state(req, REQ_AVAILABLE),
+				"Failed to perform state transition.");
 			return MK_PLUGIN_RET_END;
 		}
 		return MK_PLUGIN_RET_CONTINUE;

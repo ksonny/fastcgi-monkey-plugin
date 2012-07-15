@@ -42,6 +42,8 @@ void request_module_init(void *(*mem_alloc_p)(const size_t),
 
 int request_init(struct request *preq, size_t iov_n);
 
+int request_set_state(struct request *req, enum request_state state);
+
 int request_assign(struct request *req,
 	int fd,
 	struct client_session *cs,
