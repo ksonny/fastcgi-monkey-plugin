@@ -24,8 +24,11 @@ enum request_flags {
 
 struct request {
 	enum request_state state;
-	uint32_t flags;
+	enum request_flags flags;
+
 	int fd;
+	int fcgi_fd;
+
 	struct client_session *ccs;
 	struct session_request *sr;
 	struct chunk **cs;
@@ -55,6 +58,8 @@ int request_assign(struct request *req,
 	int fd,
 	struct client_session *cs,
 	struct session_request *sr);
+
+void request_set_fcgi_fd(struct request *req, int fcgi_fd);
 
 int request_recycle(struct request *req);
 

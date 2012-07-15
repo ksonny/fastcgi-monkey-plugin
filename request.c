@@ -18,11 +18,17 @@ void request_module_init(void *(*mem_alloc_p)(const size_t),
 int request_init(struct request *preq, size_t iov_n)
 {
 	struct request req = {
-		.state = REQ_AVAILABLE,
-		.fd    = -1,
-		.flags = 0,
-		.cs    = NULL,
-		.iov   = {
+		.state   = REQ_AVAILABLE,
+		.flags   = 0,
+
+		.fd      = -1,
+		.fcgi_fd = -1,
+
+		.ccs     = NULL,
+		.sr      = NULL,
+		.cs      = NULL,
+
+		.iov     = {
 			.buf_to_free = NULL,
 			.iov_idx     = 0,
 			.buf_idx     = 0,
@@ -61,6 +67,7 @@ static void request_reset(struct request *req)
 	req->state         = REQ_AVAILABLE;
 	req->flags         = 0;
 	req->fd            = -1;
+	req->fcgi_fd       = -1;
 	req->iov.iov_idx   = 0;
 	req->iov.buf_idx   = 0;
 	req->iov.total_len = 0;
@@ -123,6 +130,11 @@ int request_assign(struct request *req,
 	return 0;
 error:
 	return -1;
+}
+
+void request_set_fcgi_fd(struct request *req, int fcgi_fd)
+{
+	req->fcgi_fd = fcgi_fd;
 }
 
 int request_recycle(struct request *req)
