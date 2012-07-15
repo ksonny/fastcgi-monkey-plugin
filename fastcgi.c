@@ -685,9 +685,11 @@ int _mkp_event_read(int socket)
 	check_debug(h->state != FCGI_FD_CLOSING,
 		"[FD %d] Closing connection.", h->fd);
 
-	mk_api->event_socket_change_mode(h->fd,
-			MK_EPOLL_WRITE,
-			MK_EPOLL_LEVEL_TRIGGERED);
+	if (h->state == FCGI_FD_READY) {
+		mk_api->event_socket_change_mode(h->fd,
+				MK_EPOLL_WRITE,
+				MK_EPOLL_LEVEL_TRIGGERED);
+	}
 
 	return MK_PLUGIN_RET_EVENT_OWNED;
 error:
