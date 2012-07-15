@@ -677,7 +677,7 @@ int _mkp_event_write(int socket)
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
 	else if (fd && fd->state == FCGI_FD_READY) {
-		req = request_list_get_assigned(&tdata.rl);
+		req = request_list_next_assigned(&tdata.rl);
 		if (req) {
 			check(!fcgi_send_request(req, fd),
 				"[FD %d] Failed to send request.", fd->fd);

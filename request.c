@@ -231,8 +231,9 @@ int request_list_init(struct request_list *rl, int n)
 			"Failed to init request %d", i);
 	}
 
-	rl->n  = n;
-	rl->rs = tmp;
+	rl->n          = n;
+	rl->clock_hand = 0;
+	rl->rs         = tmp;
 
 	return 0;
 error:
@@ -248,14 +249,33 @@ error:
 
 
 
-struct request *request_list_get_available(struct request_list *rl)
+struct request *request_list_next_available(struct request_list *rl)
 {
-	return request_list_get_by_state(rl, REQ_AVAILABLE);
+	int i, n = rl->n, clock = rl->clock_hand;
+	struct request *r;
+
+	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
+		r = rl->rs + i;
+		if (r->state == REQ_AVAILABLE) {
+			return r;
+		}
+	}
+	return NULL;
 }
 
-struct request *request_list_get_assigned(struct request_list *rl)
+struct request *request_list_next_assigned(struct request_list *rl)
 {
-	return request_list_get_by_state(rl, REQ_ASSIGNED);
+	int i, n = rl->n, clock = rl->clock_hand;
+	struct request *r;
+
+	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
+		r = rl->rs + i;
+		if (r->state == REQ_ASSIGNED) {
+			rl->clock_hand = i;
+			return r;
+		}
+	}
+	return NULL;
 }
 
 struct request *request_list_get_by_fd(struct request_list *rl, int fd)

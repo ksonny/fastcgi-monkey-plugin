@@ -34,6 +34,7 @@ struct request {
 
 struct request_list {
 	int n;
+	int clock_hand;
 	struct request *rs;
 };
 
