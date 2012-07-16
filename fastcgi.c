@@ -322,19 +322,22 @@ int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 	struct fcgi_fd *fd;
 
 	fd = fcgi_fd_list_get_by_state(&tdata.fdl, FCGI_FD_AVAILABLE);
-	check_debug(fd, "Max connection limit reached.");
 
-	fd->fd = mk_api->socket_connect(server.addr, server.port);
-	check(fd->fd > 0, "Could not connect to fcgi server.");
+	if (fd) {
+		fd->fd = mk_api->socket_connect(server.addr, server.port);
+		check(fd->fd > 0, "Could not connect to fcgi server.");
 
-	mk_api->socket_set_nonblocking(fd->fd);
-	mk_api->event_add(fd->fd,
-			MK_EPOLL_RW,
-			plugin,
-			cs, sr,
-			MK_EPOLL_LEVEL_TRIGGERED);
+		mk_api->socket_set_nonblocking(fd->fd);
+		mk_api->event_add(fd->fd,
+				MK_EPOLL_RW,
+				plugin,
+				cs, sr,
+				MK_EPOLL_LEVEL_TRIGGERED);
 
-	fcgi_fd_set_state(fd, FCGI_FD_READY);
+		fcgi_fd_set_state(fd, FCGI_FD_READY);
+	} else {
+		debug("Connection limit reached.");
+	}
 
 	return 0;
 error:
@@ -613,9 +616,9 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		"Failed to prepare request.");
 
 	if (fcgi_wake_connection()) {
-		fcgi_new_connection(plugin, cs, sr);
+		check_debug(!fcgi_new_connection(plugin, cs, sr),
+			"New connection failed seriously.");
 	}
-
 	return MK_PLUGIN_RET_CONTINUE;
 error:
 	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
