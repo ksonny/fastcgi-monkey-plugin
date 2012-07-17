@@ -521,6 +521,9 @@ static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
 		if (req->state == REQ_STREAM_CLOSED) {
 			check(!request_set_state(req, REQ_ENDED),
 				"Failed to set request state.");
+			mk_api->event_socket_change_mode(req->fd,
+				MK_EPOLL_WRITE,
+				MK_EPOLL_LEVEL_TRIGGERED);
 		}
 		else if (req->state == REQ_FAILED && req->fd == -1) {
 			request_recycle(req);
@@ -668,6 +671,12 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	} else {
 		PLUGIN_TRACE("[REQ_ID %d] Found connection available.", req_id);
 	}
+
+	mk_api->event_socket_change_mode(cs->socket,
+			MK_EPOLL_SLEEP,
+			MK_EPOLL_LEVEL_TRIGGERED);
+
+
 	return MK_PLUGIN_RET_CONTINUE;
 error:
 	PLUGIN_TRACE("[FD %d] Connection has failed.", cs->socket);
