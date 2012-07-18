@@ -73,6 +73,15 @@ struct fcgi_end_req_body {
 	uint8_t  reserved[3];
 };
 
+struct fcgi_param_entry {
+	uint32_t key_len;
+	uint32_t value_len;
+
+	size_t position;
+	size_t base_len;
+	uint8_t *base;
+};
+
 extern const char *fcgi_msg_type_str[];
 
 extern const char *fcgi_role_str[];
@@ -95,12 +104,44 @@ size_t
 fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b);
 
 size_t
-fcgi_param_read_length(uint8_t *p);
-
-size_t
 fcgi_param_write(uint8_t *p,
 	mk_pointer key,
 	mk_pointer value);
 
+/**
+ * fcgi_param_entry_init(3) - Setup an entry from buffer.
+ */
+void fcgi_param_entry_init(struct fcgi_param_entry *e,
+		uint8_t *p,
+		size_t p_len);
+
+/**
+ * fcgi_param_entry_reset(1) - Resets position of entry.
+ */
+void fcgi_param_entry_reset(struct fcgi_param_entry *e);
+
+/**
+ * fcgi_param_entry_next(1) - Point entry at next key value pair.
+ *
+ * Returns -1 when at end of buffer, 0 otherwise.
+ */
+int fcgi_param_entry_next(struct fcgi_param_entry *e);
+
+/**
+ * fcgi_param_entry_search(2) - Search for key in buffer.
+ *
+ * Searches from entry position and forward for entry with matching key.
+ */
+int fcgi_param_entry_search(struct fcgi_param_entry *e, mk_pointer key);
+
+/**
+ * fcgi_param_entry_key(1) - Returns current key.
+ */
+mk_pointer fcgi_param_entry_key(struct fcgi_param_entry *e);
+
+/**
+ * fcgi_param_entry_value(1) - Returns current value.
+ */
+mk_pointer fcgi_param_entry_value(struct fcgi_param_entry *e);
 
 #endif // MK_FASTCGI_PROTOCOL

@@ -93,7 +93,7 @@ size_t fcgi_write_begin_req_body(uint8_t *p, const struct fcgi_begin_req_body *b
 }
 
 
-size_t fcgi_param_read_length(uint8_t *p)
+static uint32_t fcgi_param_read_length(uint8_t *p)
 {
 	size_t len;
 
@@ -152,4 +152,72 @@ size_t fcgi_param_write(uint8_t *p,
 	cnt += value.len;
 
 	return cnt;
+}
+
+int fcgi_param_entry_next(struct fcgi_param_entry *e)
+{
+	e->position += e->key_len + e->value_len;
+	check_debug(e->position < e->base_len, "At end of buffer.");
+
+	e->key_len = fcgi_param_read_length(e->base + e->position);
+	e->position += e->key_len > 127 ? 4 : 1;
+
+	e->value_len = fcgi_param_read_length(e->base + e->position);
+	e->position += e->value_len > 127 ? 4 : 1;
+
+	return 0;
+error:
+	return -1;
+}
+
+void fcgi_param_entry_init(struct fcgi_param_entry *e,
+		uint8_t *p,
+		size_t p_len)
+{
+	e->key_len   = 0;
+	e->value_len = 0;
+	e->position  = 0;
+	e->base_len  = p_len;
+	e->base      = p;
+
+	fcgi_param_entry_next(e);
+}
+
+void fcgi_param_entry_reset(struct fcgi_param_entry *e)
+{
+	e->key_len   = 0;
+	e->value_len = 0;
+	e->position  = 0;
+
+	fcgi_param_entry_next(e);
+}
+
+int fcgi_param_entry_search(struct fcgi_param_entry *e, mk_pointer key)
+{
+	mk_pointer e_key;
+
+	do {
+		e_key = fcgi_param_entry_key(e);
+		if (e_key.len == key.len && !bcmp(e_key.data, key.data, key.len)) {
+			return 0;
+		}
+	} while (fcgi_param_entry_next(e) != -1);
+
+	return -1;
+}
+
+mk_pointer fcgi_param_entry_key(struct fcgi_param_entry *e)
+{
+	return (mk_pointer){
+		.data = (char *)e->base + e->position,
+		.len  = e->key_len,
+	};
+}
+
+mk_pointer fcgi_param_entry_value(struct fcgi_param_entry *e)
+{
+	return (mk_pointer){
+		.data = (char *)e->base + e->position + e->key_len,
+		.len  = e->value_len,
+	};
 }
