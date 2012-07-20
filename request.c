@@ -308,6 +308,19 @@ struct request *request_list_get_by_fd(struct request_list *rl, int fd)
 	return NULL;
 }
 
+struct request *request_list_get_by_fcgi_fd(struct request_list *rl, int fd)
+{
+	int i;
+	struct request *r = NULL;
+
+	for (i = 0; i < rl->n; i++) {
+		r = rl->rs + i;
+		if (r->fcgi_fd == fd)
+			return r;
+	}
+	return NULL;
+}
+
 struct request *request_list_get(struct request_list *rl, uint16_t req_id)
 {
 	int real_req_index = req_id - rl->id_offset;
