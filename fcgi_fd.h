@@ -11,8 +11,6 @@ enum fcgi_fd_state {
 
 struct fcgi_fd {
 	enum fcgi_fd_state state;
-
-	int req_id;
 	int fd;
 };
 
@@ -25,8 +23,6 @@ void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *));
 
 int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state);
-
-void fcgi_fd_set_req_id(struct fcgi_fd *fd, int req_id);
 
 int fcgi_fd_list_init(struct fcgi_fd_list *fdl, int n);
 

@@ -48,11 +48,6 @@ error:
 	return -1;
 }
 
-void fcgi_fd_set_req_id(struct fcgi_fd *fd, int req_id)
-{
-	fd->req_id = req_id;
-}
-
 int fcgi_fd_list_init(struct fcgi_fd_list *fdl, int n)
 {
 	struct fcgi_fd *tmp = NULL;
@@ -63,7 +58,6 @@ int fcgi_fd_list_init(struct fcgi_fd_list *fdl, int n)
 
 	for (i = 0; i < n; i++) {
 		tmp[i].state = FCGI_FD_AVAILABLE;
-		tmp[i].req_id = -1;
 		tmp[i].fd = -1;
 	}
 

@@ -508,7 +508,6 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 				FCGI_PROTOCOL_STATUS_STR(b.protocol_status));
 		}
 
-		fcgi_fd_set_req_id(fd, 0);
 		request_set_fcgi_fd(req, -1);
 
 		check(!fcgi_fd_set_state(fd, FCGI_FD_READY),
@@ -726,7 +725,6 @@ static int hangup(int socket)
 		PLUGIN_TRACE("[FCGI_FD %d] Hangup event received.", fd->fd);
 
 		fd->fd     = -1;
-		fd->req_id = 0;
 		fd->state  = FCGI_FD_AVAILABLE;
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
@@ -787,7 +785,6 @@ int _mkp_event_write(int socket)
 		if (req) {
 			req_id = request_list_index_of(&tdata.rl, req);
 			request_set_fcgi_fd(req, fd->fd);
-			fcgi_fd_set_req_id(fd, req_id);
 
 			PLUGIN_TRACE("[FCGI_FD %d] Sending request with id %d.",
 					fd->fd, req_id);
@@ -811,14 +808,13 @@ int _mkp_event_write(int socket)
 	}
 	else if (fd && fd->state == FCGI_FD_RECEIVING) {
 
-		req = request_list_get(&tdata.rl, fd->req_id);
+		req = request_list_get_by_fcgi_fd(&tdata.rl, fd->fd);
 
 		if (req && req->state == REQ_FAILED) {
 			log_info("[FD %d] We have failed request!", req->fd);
 
 			request_release_chunks(req);
 
-			fcgi_fd_set_req_id(fd, 0);
 			check(!fcgi_send_abort_request(req, fd),
 				"[FD %d] Failed to send abort request.", fd->fd);
 		}
