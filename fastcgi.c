@@ -460,6 +460,7 @@ int fcgi_end_request(struct request *req)
 }
 
 static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
+		struct request_list *rl,
 		struct fcgi_header h,
 		struct chunk_ptr read)
 {
@@ -468,7 +469,7 @@ static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
 
 	size_t pkg_size = sizeof(h) + h.body_len + h.body_pad;
 
-	req = request_list_get(&tdata.rl, h.req_id);
+	req = request_list_get(rl, h.req_id);
 	check(req, "Failed to get request %d.", h.req_id);
 
 	switch (h.type) {
@@ -543,7 +544,9 @@ error:
 	return -1;
 }
 
-int fcgi_recv_response(struct fcgi_fd *fd)
+int fcgi_recv_response(struct fcgi_fd *fd,
+		struct chunk_list *cl,
+		struct request_list *rl)
 {
 	size_t pkg_size, inherit = 0;
 	ssize_t ret = 0;
@@ -555,7 +558,7 @@ int fcgi_recv_response(struct fcgi_fd *fd)
 
 	PLUGIN_TRACE("[FCGI_FD %d] Receiving response.", fd->fd);
 
-	c = chunk_list_current(&tdata.cm);
+	c = chunk_list_current(cl);
 	if (c != NULL) {
 		write = chunk_write_ptr(c);
 		read  = chunk_read_ptr(c);
@@ -566,7 +569,7 @@ int fcgi_recv_response(struct fcgi_fd *fd)
 			PLUGIN_TRACE("New chunk, inherit %ld.", inherit);
 			c = chunk_new(65536);
 			check_mem(c);
-			check(!chunk_list_add(&tdata.cm, c, inherit),
+			check(!chunk_list_add(cl, c, inherit),
 				"Failed to add chunk.");
 			write   = chunk_write_ptr(c);
 			inherit = 0;
@@ -601,7 +604,7 @@ int fcgi_recv_response(struct fcgi_fd *fd)
 				inherit = read.len;
 				ret     = inherit;
 			} else {
-				ret = fcgi_handle_pkg(fd, h, read);
+				ret = fcgi_handle_pkg(fd, rl, h, read);
 				check(ret > 0, "Failed to handle pkg.");
 			}
 
@@ -830,16 +833,19 @@ error:
 
 int _mkp_event_read(int socket)
 {
+	struct chunk_list *cl = &tdata.cm;
+	struct request_list *rl = &tdata.rl;
+	struct fcgi_fd_list *fdl = &tdata.fdl;
 	struct fcgi_fd *fd;
 
-	fd = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
+	fd = fcgi_fd_list_get_by_fd(fdl, socket);
 	if (!fd) {
 		return MK_PLUGIN_RET_EVENT_NEXT;
 	}
 	else if (fd->state == FCGI_FD_RECEIVING) {
 		PLUGIN_TRACE("[FCGI_FD %d] Receiving data.", fd->fd);
 
-		check(!fcgi_recv_response(fd),
+		check(!fcgi_recv_response(fd, cl, rl),
 			"[FCGI_FD %d] Failed to receive response.", fd->fd);
 		check_debug(fd->state != FCGI_FD_CLOSING,
 			"[FCGI_FD %d] Closing connection.", fd->fd);
