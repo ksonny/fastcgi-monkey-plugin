@@ -73,8 +73,7 @@ int fcgi_conf(char *confdir)
 
 
 #define __write_param(env, len, pos, key, value) do { \
-		check(len - pos > fcgi_param_write(NULL, key, value), \
-			"Out of memory."); \
+		check(len - pos > 8 + key.len + value.len, "Out of memory."); \
 		pos += fcgi_param_write(env + pos, key, value); \
 	} while (0)
 
