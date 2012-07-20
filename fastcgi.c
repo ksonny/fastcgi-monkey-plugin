@@ -459,17 +459,13 @@ int fcgi_end_request(struct request *req)
 	return 0;
 }
 
-static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
-		struct request_list *rl,
+static int fcgi_handle_pkg(struct fcgi_fd *fd,
+		struct request *req,
 		struct fcgi_header h,
 		struct chunk_ptr read)
 {
 	struct fcgi_end_req_body b;
-	struct request *req;
 
-	size_t pkg_size = sizeof(h) + h.body_len + h.body_pad;
-
-	req = request_list_get(rl, h.req_id);
 	check(req, "Failed to get request %d.", h.req_id);
 
 	switch (h.type) {
@@ -539,7 +535,7 @@ static ssize_t fcgi_handle_pkg(struct fcgi_fd *fd,
 			FCGI_MSG_TYPE_STR(h.type));
 	}
 
-	return pkg_size;
+	return 0;
 error:
 	return -1;
 }
@@ -553,6 +549,7 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 	int done = 0;
 
 	struct fcgi_header h;
+	struct request *req;
 	struct chunk *c;
 	struct chunk_ptr write = {0}, read = {0};
 
@@ -604,8 +601,10 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 				inherit = read.len;
 				ret     = inherit;
 			} else {
-				ret = fcgi_handle_pkg(fd, rl, h, read);
-				check(ret > 0, "Failed to handle pkg.");
+				req = request_list_get(rl, h.req_id);
+				check(!fcgi_handle_pkg(fd, req, h, read),
+					"Failed to handle pkg.");
+				ret = pkg_size;
 			}
 
 			read.data += ret;
