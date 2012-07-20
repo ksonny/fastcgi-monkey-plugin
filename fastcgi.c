@@ -542,7 +542,11 @@ error:
 
 int fcgi_recv_response(struct fcgi_fd *fd,
 		struct chunk_list *cl,
-		struct request_list *rl)
+		struct request_list *rl,
+		int (*handle_pkg)(struct fcgi_fd *fd,
+			struct request *req,
+			struct fcgi_header h,
+			struct chunk_ptr read))
 {
 	size_t pkg_size, inherit = 0;
 	ssize_t ret = 0;
@@ -602,7 +606,7 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 				ret     = inherit;
 			} else {
 				req = request_list_get(rl, h.req_id);
-				check(!fcgi_handle_pkg(fd, req, h, read),
+				check(!handle_pkg(fd, req, h, read),
 					"Failed to handle pkg.");
 				ret = pkg_size;
 			}
@@ -844,7 +848,7 @@ int _mkp_event_read(int socket)
 	else if (fd->state == FCGI_FD_RECEIVING) {
 		PLUGIN_TRACE("[FCGI_FD %d] Receiving data.", fd->fd);
 
-		check(!fcgi_recv_response(fd, cl, rl),
+		check(!fcgi_recv_response(fd, cl, rl, fcgi_handle_pkg),
 			"[FCGI_FD %d] Failed to receive response.", fd->fd);
 		check_debug(fd->state != FCGI_FD_CLOSING,
 			"[FCGI_FD %d] Closing connection.", fd->fd);
