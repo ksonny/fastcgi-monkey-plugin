@@ -7,20 +7,14 @@
 #include "MKPlugin.h"
 
 #include "dbg.h"
+#include "fcgi_config.h"
 #include "fcgi_fd.h"
 #include "protocol.h"
 #include "chunk.h"
 #include "request.h"
 
-struct fcgi_server {
-	struct mk_config *conf;
-	regex_t match_regex;
-	char   *addr;
-	int     port;
-};
-
 struct fcgi_thread_data {
-	struct chunk_list cm;
+	struct chunk_list cl;
 	struct request_list rl;
 	struct fcgi_fd_list fdl;
 };
@@ -30,47 +24,8 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
               VERSION,			/* version */
               MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX);	/* hooks */
 
-static struct fcgi_server server;
+static struct fcgi_config fcgi_global_config;
 static __thread struct fcgi_thread_data tdata;
-
-static int fcgi_validate_conf(void)
-{
-	check(server.addr != NULL, "No server addr configured.");
-	check(server.port != 0, "No server port configured.");
-
-	return 0;
-error:
-	return -1;
-}
-
-int fcgi_conf(char *confdir)
-{
-	unsigned long len;
-	char *conf_path = NULL;
-
-	struct mk_config_section *section;
-	struct mk_list *head;
-
-	mk_api->str_build(&conf_path, &len, "%s/fastcgi.conf", confdir);
-	server.conf = mk_api->config_create(conf_path);
-
-	mk_list_foreach(head, &server.conf->sections) {
-		section = mk_list_entry(head, struct mk_config_section, _head);
-
-		if (strcasecmp(section->name, "FASTCGI") != 0)
-			continue;
-
-		server.addr = mk_api->config_section_getval(
-			section, "ServerAddr", MK_CONFIG_VAL_STR);
-		server.port = (size_t)mk_api->config_section_getval(
-			section, "ServerPort", MK_CONFIG_VAL_NUM);
-	}
-
-	mk_api->mem_free(conf_path);
-
-	return fcgi_validate_conf();
-}
-
 
 #define __write_param(env, len, pos, key, value) do { \
 		check(len - pos > 8 + key.len + value.len, "Out of memory."); \
@@ -241,9 +196,6 @@ error:
 
 int _mkp_init(struct plugin_api **api, char *confdir)
 {
-	int ret = 0;
-	char error_str[80];
-
 	mk_api = *api;
 
 	chunk_module_init(mk_api->mem_alloc, mk_api->mem_free);
@@ -252,25 +204,17 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 
 	check(!fcgi_validate_struct_sizes(),
 		"Validating struct sizes failed.");
-	check(!fcgi_conf(confdir),
+	check(!fcgi_config_read(&fcgi_global_config, confdir),
 		"Failed to read config.");
-
-	ret = regcomp(&server.match_regex, "/fcgitest", REG_EXTENDED|REG_NOSUB);
-	check(!ret, "Regex failure.");
 
 	return 0;
 error:
-	if (ret) {
-		regerror(ret, &server.match_regex, error_str, 80);
-		log_err("Regex compile failed: %s", error_str);
-	}
 	return -1;
 }
 
 void _mkp_exit()
 {
-	regfree(&server.match_regex);
-	log_info("Exit module.");
+	fcgi_config_free(&fcgi_global_config);
 }
 
 static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
