@@ -587,39 +587,58 @@ error:
 	return -1;
 }
 
+static int regex_match_location(const struct fcgi_config *config,
+		const char *uri)
+{
+	int i;
+	regex_t *regp;
+
+	for (i = 0; i < config->location_count; i++) {
+		regp = &config->locations[i].match_regex;
+		if (!regexec(regp, uri, 0, NULL, 0)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		struct session_request *sr)
 {
-	char *url = NULL;
+	char *uri = NULL;
+	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req = NULL;
 	int req_id;
+	int location_id;
 
-	req = request_list_get_by_fd(&tdata.rl, cs->socket);
+	req = request_list_get_by_fd(rl, cs->socket);
 	if (req) {
 #ifdef TRACE
-		req_id = request_list_index_of(&tdata.rl, req);
+		req_id = request_list_index_of(rl, req);
 		PLUGIN_TRACE("[FD %d] Ghost event on req_id %d.",
 			cs->socket, req_id);
 #endif
 		return MK_PLUGIN_RET_CONTINUE;
 	}
 
-	url = mk_api->mem_alloc_z(sr->uri.len + 1);
-	memcpy(url, sr->uri.data, sr->uri.len);
-	if (regexec(&server.match_regex, url, 0, NULL, 0)) {
-		mk_api->mem_free(url);
+	uri = mk_api->mem_alloc_z(sr->uri.len + 1);
+	memcpy(uri, sr->uri.data, sr->uri.len);
+
+	location_id = regex_match_location(&fcgi_global_config, uri);
+	mk_api->mem_free(uri);
+	if (location_id == -1) {
+		PLUGIN_TRACE("[FD %d] Did not match any location.", cs->socket);
 		return MK_PLUGIN_RET_NOT_ME;
 	}
-	mk_api->mem_free(url);
 
 	PLUGIN_TRACE("[FD %d] URI match found.", cs->socket);
-	req = request_list_next_available(&tdata.rl);
+	req = request_list_next_available(rl, location_id);
 
 	check(req, "[FD %d] No available request structs.", cs->socket);
 
-	req_id = request_list_index_of(&tdata.rl, req);
+	req_id = request_list_index_of(rl, req);
 
-	check(!request_assign(req, cs->socket, cs, sr),
+	check(!request_assign(req, cs->socket, location_id, cs, sr),
 		"[REQ_ID %d] Failed to assign request for fd %d.",
 		req_id, cs->socket);
 	check(!fcgi_prepare_request(req),
