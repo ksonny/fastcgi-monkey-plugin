@@ -28,6 +28,8 @@ struct request {
 	int fd;
 	int fcgi_fd;
 
+	int clock_id;
+
 	struct client_session *cs;
 	struct session_request *sr;
 
@@ -42,7 +44,8 @@ struct request {
 struct request_list {
 	int n;
 	int id_offset;
-	int clock_hand;
+	int clock_count;
+	int *clock_hands;
 	struct request *rs;
 };
 
@@ -55,6 +58,7 @@ int request_set_state(struct request *req, enum request_state state);
 
 int request_assign(struct request *req,
 	int fd,
+	int location_id,
 	struct client_session *cs,
 	struct session_request *sr);
 
@@ -69,14 +73,17 @@ ssize_t request_add_pkg(struct request *req,
 void request_free(struct request *req);
 
 
-int request_list_init(struct request_list *rl, int n, int id_offset);
+int request_list_init(struct request_list *rl,
+		int clock_count,
+		int id_offset,
+		int n);
 
 /*
  * Gets next available request, starting from rl->clock_hand.
  *
  * Returns NULL on failure, otherwise pointer to struct request.
  */
-struct request *request_list_next_available(struct request_list *rl);
+struct request *request_list_next_available(struct request_list *rl, int clock_id);
 
 /*
  * Gets next assigned request, starting from .clock_hand. The clock_hand
@@ -84,7 +91,7 @@ struct request *request_list_next_available(struct request_list *rl);
  *
  * Returns NULL on failure, otherwise pointer to struct request.
  */
-struct request *request_list_next_assigned(struct request_list *rl);
+struct request *request_list_next_assigned(struct request_list *rl, int clock_id);
 
 struct request *request_list_get_by_fd(struct request_list *rl, int fd);
 

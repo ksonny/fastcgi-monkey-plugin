@@ -24,6 +24,7 @@ int request_init(struct request *req, size_t iov_n)
 		.fd = -1,
 		.fcgi_fd = -1,
 
+		.clock_id = -1,
 		.cs = NULL,
 		.sr = NULL,
 
@@ -43,6 +44,7 @@ static void request_reset(struct request *req)
 	req->flags         = 0;
 	req->fd            = -1;
 	req->fcgi_fd       = -1;
+	req->clock_id      = -1;
 
 	chunk_iov_reset(&req->iov);
 }
@@ -96,6 +98,7 @@ error:
 
 int request_assign(struct request *req,
 	int fd,
+	int clock_id,
 	struct client_session *cs,
 	struct session_request *sr)
 {
@@ -103,6 +106,7 @@ int request_assign(struct request *req,
 		"Failed to set request state.");
 
 	req->fd = fd;
+	req->clock_id = clock_id;
 	req->cs = cs;
 	req->sr = sr;
 	return 0;
@@ -151,10 +155,21 @@ void request_free(struct request *req)
 	chunk_iov_free(&req->iov);
 }
 
-int request_list_init(struct request_list *rl, int id_offset, int n)
+int request_list_init(struct request_list *rl,
+		int clock_count,
+		int id_offset,
+		int n)
 {
+	int *clock_hands = NULL;
 	struct request *tmp = NULL;
 	int i;
+
+	clock_hands = mem_alloc(clock_count * sizeof(*clock_hands));
+	check_mem(clock_hands);
+
+	for (i = 0; i < clock_count; i++) {
+		clock_hands[i] = 0;
+	}
 
 	tmp = mem_alloc(n * sizeof(*tmp));
 	check_mem(tmp);
@@ -164,10 +179,11 @@ int request_list_init(struct request_list *rl, int id_offset, int n)
 			"Failed to init request %d", i);
 	}
 
-	rl->n          = n;
-	rl->id_offset  = id_offset;
-	rl->clock_hand = 0;
-	rl->rs         = tmp;
+	rl->n = n;
+	rl->id_offset = id_offset;
+	rl->clock_count = clock_count;
+	rl->clock_hands = clock_hands;
+	rl->rs = tmp;
 
 	return 0;
 error:
@@ -181,11 +197,29 @@ error:
 	return -1;
 }
 
-
-
-struct request *request_list_next_available(struct request_list *rl)
+static int get_clock_hand(struct request_list *rl, int loc_id)
 {
-	int i, n = rl->n, clock = rl->clock_hand;
+	check(loc_id >= 0 && loc_id < rl->clock_count,
+		"Location index out of range.");
+
+	return rl->clock_hands[loc_id];
+error:
+	return 0;
+}
+
+static void set_clock_hand(struct request_list *rl, int loc_id, int clock_hand)
+{
+	check(loc_id >= 0 && loc_id < rl->clock_count,
+		"location index out of range.");
+
+	rl->clock_hands[loc_id] = clock_hand;
+error:
+	return;
+}
+
+struct request *request_list_next_available(struct request_list *rl, int clock_id)
+{
+	int i, n = rl->n, clock = get_clock_hand(rl, clock_id);
 	struct request *r;
 
 	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
@@ -197,15 +231,15 @@ struct request *request_list_next_available(struct request_list *rl)
 	return NULL;
 }
 
-struct request *request_list_next_assigned(struct request_list *rl)
+struct request *request_list_next_assigned(struct request_list *rl, int clock_id)
 {
-	int i, n = rl->n, clock = rl->clock_hand;
+	int i, n = rl->n, clock = get_clock_hand(rl, clock_id);
 	struct request *r;
 
 	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
 		r = rl->rs + i;
-		if (r->state == REQ_ASSIGNED) {
-			rl->clock_hand = i;
+		if (r->state == REQ_ASSIGNED && r->clock_id == clock_id) {
+			set_clock_hand(rl, clock_id, i);
 			return r;
 		}
 	}
