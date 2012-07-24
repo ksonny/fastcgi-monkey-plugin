@@ -13,12 +13,22 @@ void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 	mem_free  = mem_free_p;
 }
 
+void fcgi_fd_init(struct fcgi_fd *fd)
+{
+	fd->state = FCGI_FD_AVAILABLE;
+	fd->fd = -1;
+	fd->server_id = -1;
+	fd->location_id = 0;
+}
+
 int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state)
 {
 	switch (state) {
 	case FCGI_FD_AVAILABLE:
 		check(fd->state & (FCGI_FD_CLOSING | FCGI_FD_SLEEPING),
 			"Bad state transition.");
+		fd->state = FCGI_FD_AVAILABLE;
+		fd->fd = -1;
 		break;
 	case FCGI_FD_READY:
 		check(fd->state & (FCGI_FD_AVAILABLE
@@ -57,8 +67,7 @@ int fcgi_fd_list_init(struct fcgi_fd_list *fdl, int n)
 	check_mem(tmp);
 
 	for (i = 0; i < n; i++) {
-		tmp[i].state = FCGI_FD_AVAILABLE;
-		tmp[i].fd = -1;
+		fcgi_fd_init(tmp + i);
 	}
 
 	fdl->n   = n;
@@ -75,14 +84,17 @@ void fcgi_fd_list_free(struct fcgi_fd_list *fdl)
 	mem_free(fdl->fds);
 }
 
-struct fcgi_fd *fcgi_fd_list_get_by_state(struct fcgi_fd_list *fdl,
+struct fcgi_fd *fcgi_fd_list_get(struct fcgi_fd_list *fdl,
+		int location_id,
 		enum fcgi_fd_state state)
 {
+	struct fcgi_fd *fd;
 	int i;
 
 	for (i = 0; i < fdl->n; i++) {
-		if (fdl->fds[i].state & state) {
-			return fdl->fds + i;
+		fd = fdl->fds + i;
+		if (fd->state & state && fd->location_id == location_id) {
+			return fd;
 		}
 	}
 	return NULL;
