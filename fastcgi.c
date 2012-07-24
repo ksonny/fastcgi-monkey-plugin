@@ -300,7 +300,6 @@ int fcgi_prepare_request(struct request *req)
 {
 	struct fcgi_begin_req_body b = {
 		.role  = FCGI_RESPONDER,
-		.flags = FCGI_KEEP_CONN,
 	};
 	struct fcgi_header h = {
 		.version  = FCGI_VERSION_1,
@@ -310,14 +309,18 @@ int fcgi_prepare_request(struct request *req)
 	       len2 = sizeof(h),
 	       len3 = 2 * sizeof(h);
 	uint8_t *p1 = NULL, *p2 = NULL, *p3 = NULL;
+
+	struct fcgi_location *location;
+
+	struct request_list *rl = &fcgi_local_context->rl;
 	int req_id = -1;
-	mk_pointer env = {0};
+	mk_pointer env = fcgi_create_env(req->cs, req->sr);
 
-	req_id = request_list_index_of(&tdata.rl, req);
-	check(req_id > 0, "Bad request id: %d.", req_id);
-	env = fcgi_create_env(req->cs, req->sr);
+	req_id = request_list_index_of(rl, req);
+	check(req_id > 0, "[REQ_ID %d] Bad request id.", req_id);
 
-	check(req_id != -1, "Could not get index of request.");
+	location = fcgi_config_get_location(&fcgi_global_config, req->clock_id);
+	check(location, "[REQ_ID %d] Failed to get location.", req_id);
 
 	p1 = mk_api->mem_alloc(len1 + len2 + len3);
 	check_mem(p1);
@@ -329,6 +332,7 @@ int fcgi_prepare_request(struct request *req)
 	h.req_id   = req_id;
 	h.body_len = sizeof(b);
 	fcgi_write_header(p1, &h);
+	b.flags = location->keep_alive ? FCGI_KEEP_CONN : 0;
 	fcgi_write_begin_req_body(p1 + sizeof(h), &b);
 
 	// Write parameter.
