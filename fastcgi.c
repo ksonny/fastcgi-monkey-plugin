@@ -2,6 +2,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <regex.h>
 
 #include "MKPlugin.h"
@@ -257,26 +258,60 @@ int fcgi_wake_connection()
 	return 0;
 }
 
-int fcgi_new_connection(struct plugin *plugin)
+int fcgi_server_connect(const struct fcgi_server *server)
 {
-	struct fcgi_fd *fd;
+	int sock_fd = -1;
+	socklen_t addr_len;
+	struct sockaddr_un addr;
 
-	fd = fcgi_fd_list_get_by_state(&tdata.fdl, FCGI_FD_AVAILABLE);
+	if (server->path) {
+		sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		check(sock_fd != -1, "Failed to create unix socket.");
 
-	if (fd) {
-		fd->fd = mk_api->socket_connect(server.addr, server.port);
-		check(fd->fd > 0, "Could not connect to fcgi server.");
+		addr.sun_family = AF_UNIX;
+		check(sizeof(addr.sun_path) > strlen(server->path) + 1,
+			"Socket path too long.");
+		strcpy(addr.sun_path, server->path);
 
-		mk_api->socket_set_nonblocking(fd->fd);
-		mk_api->event_add(fd->fd,
-				MK_EPOLL_RW,
-				plugin,
-				MK_EPOLL_LEVEL_TRIGGERED);
-
-		fcgi_fd_set_state(fd, FCGI_FD_READY);
-	} else {
-		PLUGIN_TRACE("Connection limit reached.");
+		addr_len = sizeof(addr.sun_family) + strlen(addr.sun_path);
+		check(connect(sock_fd, (struct sockaddr *)&addr, addr_len) != -1,
+			"Failed to connect unix socket.");
 	}
+	else if (server->addr) {
+		sock_fd = mk_api->socket_connect(server->addr, server->port);
+		check(sock_fd != -1, "Could not connect to fcgi server.");
+	}
+
+	return sock_fd;
+error:
+	return -1;
+}
+
+int fcgi_new_connection(struct plugin *plugin, int location_id)
+{
+	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
+	struct fcgi_fd *fd;
+	struct fcgi_server *server;
+
+	fd = fcgi_fd_list_get(fdl, FCGI_FD_AVAILABLE, location_id);
+	if (!fd) {
+		PLUGIN_TRACE("Connection limit reached.");
+		return 0;
+	}
+
+	server = fcgi_config_get_server(&fcgi_global_config, fd->server_id);
+	check(server, "Server for this fcgi_fd does not exist.");
+
+	fd->fd = fcgi_server_connect(server);
+	check(fd->fd != -1, "Failed to connect to server.");
+
+	mk_api->socket_set_nonblocking(fd->fd);
+	mk_api->event_add(fd->fd,
+			MK_EPOLL_RW,
+			plugin,
+			MK_EPOLL_LEVEL_TRIGGERED);
+
+	fcgi_fd_set_state(fd, FCGI_FD_READY);
 
 	return 0;
 error:
@@ -617,7 +652,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	if (fcgi_wake_connection()) {
 		PLUGIN_TRACE("[REQ_ID %d] Create new fcgi connection.", req_id);
-		check_debug(!fcgi_new_connection(plugin),
+		check_debug(!fcgi_new_connection(plugin, location_id),
 			"New connection failed seriously.");
 	} else {
 		PLUGIN_TRACE("[REQ_ID %d] Found connection available.", req_id);
