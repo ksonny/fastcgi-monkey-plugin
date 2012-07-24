@@ -697,14 +697,14 @@ error:
 
 void _mkp_core_thctx(void)
 {
-	PLUGIN_TRACE("Init thread context.");
-	check(!request_list_init(&tdata.rl, 1, mk_api->config->worker_capacity),
-		"Failed to init request list.");
-	check(!fcgi_fd_list_init(&tdata.fdl, 1),
-		"Failed to init fd list.");
+	int tid;
 
-	chunk_list_init(&tdata.cm);
+	tid = fcgi_context_list_assign_thread_id(&fcgi_global_context_list);
+	check(tid != -1, "Failed to assign thread id.");
 
+	PLUGIN_TRACE("Thread assigned id %d.", tid);
+
+	fcgi_local_context = fcgi_context_list_get(&fcgi_global_context_list, tid);
 	return;
 error:
 	log_err("Failed to initiate thread context.");
