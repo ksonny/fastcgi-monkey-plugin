@@ -214,16 +214,18 @@ static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
  * Will return 0 if there are any connections available to handle a
  * request. If such a connection is sleeping, wake it.
  */
-int fcgi_wake_connection()
+int fcgi_wake_connection(int location_id)
 {
+	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
 	struct fcgi_fd *fd;
 
-	fd = fcgi_fd_list_get_by_state(&tdata.fdl,
-			FCGI_FD_SLEEPING | FCGI_FD_READY);
+	fd = fcgi_fd_list_get(fdl,
+			FCGI_FD_SLEEPING | FCGI_FD_READY,
+			location_id);
 	if (!fd) {
 		return -1;
 	}
-	if (fd->state == FCGI_FD_SLEEPING) {
+	else if (fd->state == FCGI_FD_SLEEPING) {
 
 		PLUGIN_TRACE("[FCGI_FD %d] Waking up connection.", fd->fd);
 		mk_api->event_socket_change_mode(fd->fd,
@@ -626,7 +628,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	PLUGIN_TRACE("[FD %d] Assigned to req_id %d.", cs->socket, req_id);
 	PLUGIN_TRACE("[REQ_ID %d] Request ready to be sent.", req_id);
 
-	if (fcgi_wake_connection()) {
+	if (fcgi_wake_connection(location_id)) {
 		PLUGIN_TRACE("[REQ_ID %d] Create new fcgi connection.", req_id);
 		check_debug(!fcgi_new_connection(plugin, location_id),
 			"New connection failed seriously.");
