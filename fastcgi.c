@@ -713,12 +713,14 @@ error:
 
 static int hangup(int socket)
 {
+	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
 	struct fcgi_fd *fd;
+	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req;
 	int req_id;
 
-	fd  = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
-	req = fd ? NULL : request_list_get_by_fd(&tdata.rl, socket);
+	fd  = fcgi_fd_list_get_by_fd(fdl, socket);
+	req = fd ? NULL : request_list_get_by_fd(rl, socket);
 
 	if (!fd && !req) {
 		return MK_PLUGIN_RET_EVENT_NEXT;
@@ -731,7 +733,7 @@ static int hangup(int socket)
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
 	else if (req) {
-		req_id = request_list_index_of(&tdata.rl, req);
+		req_id = request_list_index_of(rl, req);
 
 		if (req->fcgi_fd == -1) {
 			PLUGIN_TRACE("[REQ_ID %d] Hangup event.", req_id);
@@ -757,17 +759,19 @@ static int hangup(int socket)
 int _mkp_event_write(int socket)
 {
 	int req_id;
+	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req = NULL;
+	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
 	struct fcgi_fd *fd;
 
-	fd  = fcgi_fd_list_get_by_fd(&tdata.fdl, socket);
-	req = fd ? NULL : request_list_get_by_fd(&tdata.rl, socket);
+	fd  = fcgi_fd_list_get_by_fd(fdl, socket);
+	req = fd ? NULL : request_list_get_by_fd(rl, socket);
 
 	if (!fd && !req) {
 		return MK_PLUGIN_RET_EVENT_NEXT;
 	}
 	else if (req && req->state == REQ_ENDED) {
-		req_id = request_list_index_of(&tdata.rl, req);
+		req_id = request_list_index_of(rl, req);
 
 		PLUGIN_TRACE("[REQ_ID %d] Request ended.", req_id);
 
@@ -782,10 +786,10 @@ int _mkp_event_write(int socket)
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
 	else if (fd && fd->state == FCGI_FD_READY) {
-		req = request_list_next_assigned(&tdata.rl);
+		req = request_list_next_assigned(rl, fd->location_id);
 
 		if (req) {
-			req_id = request_list_index_of(&tdata.rl, req);
+			req_id = request_list_index_of(rl, req);
 			request_set_fcgi_fd(req, fd->fd);
 
 			PLUGIN_TRACE("[FCGI_FD %d] Sending request with id %d.",
@@ -810,7 +814,7 @@ int _mkp_event_write(int socket)
 	}
 	else if (fd && fd->state == FCGI_FD_RECEIVING) {
 
-		req = request_list_get_by_fcgi_fd(&tdata.rl, fd->fd);
+		req = request_list_get_by_fcgi_fd(rl, fd->fd);
 
 		if (req && req->state == REQ_FAILED) {
 			log_info("[FD %d] We have failed request!", req->fd);
@@ -834,9 +838,9 @@ error:
 
 int _mkp_event_read(int socket)
 {
-	struct chunk_list *cl = &tdata.cm;
-	struct request_list *rl = &tdata.rl;
-	struct fcgi_fd_list *fdl = &tdata.fdl;
+	struct chunk_list *cl = &fcgi_local_context->cl;
+	struct request_list *rl = &fcgi_local_context->rl;
+	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
 	struct fcgi_fd *fd;
 
 	fd = fcgi_fd_list_get_by_fd(fdl, socket);
