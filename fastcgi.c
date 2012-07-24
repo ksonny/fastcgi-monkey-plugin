@@ -8,16 +8,11 @@
 
 #include "dbg.h"
 #include "fcgi_config.h"
+#include "fcgi_context.h"
 #include "fcgi_fd.h"
 #include "protocol.h"
 #include "chunk.h"
 #include "request.h"
-
-struct fcgi_thread_data {
-	struct chunk_list cl;
-	struct request_list rl;
-	struct fcgi_fd_list fdl;
-};
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
               "FastCGI client",		/* name */
@@ -25,7 +20,9 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
               MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX);	/* hooks */
 
 static struct fcgi_config fcgi_global_config;
-static __thread struct fcgi_thread_data tdata;
+static struct fcgi_context_list fcgi_global_context_list;
+
+static __thread struct fcgi_context *fcgi_local_context;
 
 #define __write_param(env, len, pos, key, value) do { \
 		check(len - pos > 8 + key.len + value.len, "Out of memory."); \
@@ -201,6 +198,7 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 	chunk_module_init(mk_api->mem_alloc, mk_api->mem_free);
 	request_module_init(mk_api->mem_alloc, mk_api->mem_free);
 	fcgi_fd_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	fcgi_thread_data_module_init(mk_api->mem_alloc, mk_api->mem_free);
 
 	check(!fcgi_validate_struct_sizes(),
 		"Validating struct sizes failed.");

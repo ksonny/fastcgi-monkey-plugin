@@ -5,7 +5,7 @@ CFLAGS	= $CFLAGS
 LDFLAGS = $LDFLAGS
 DEFS    = $DEFS
 INCDIR  = ../../src/include
-FASTCGI_OBJECTS = fastcgi.o protocol.o chunk.o request.o fcgi_fd.o fcgi_config.o
+FASTCGI_OBJECTS = fastcgi.o protocol.o chunk.o request.o fcgi_fd.o fcgi_config.o fcgi_context.o
 
 all: monkey-fastcgi.so
 
