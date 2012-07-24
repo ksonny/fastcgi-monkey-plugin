@@ -18,7 +18,7 @@
 MONKEY_PLUGIN("fastcgi",		/* shortname */
               "FastCGI client",		/* name */
               VERSION,			/* version */
-              MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX);	/* hooks */
+              MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX | MK_PLUGIN_CORE_PRCTX);
 
 static struct fcgi_config fcgi_global_config;
 static struct fcgi_context_list fcgi_global_context_list;
@@ -679,6 +679,20 @@ void _mkp_exit()
 
 	PLUGIN_TRACE("Free configuration.");
 	fcgi_config_free(&fcgi_global_config);
+}
+
+int _mkp_core_prctx(struct server_config *config)
+{
+	PLUGIN_TRACE("Init thread context list.");
+	check(!fcgi_context_list_init(&fcgi_global_context_list,
+				&fcgi_global_config,
+				config->workers,
+				config->worker_capacity),
+			"Failed to init thread data list.");
+
+	return 0;
+error:
+	return -1;
 }
 
 void _mkp_core_thctx(void)
