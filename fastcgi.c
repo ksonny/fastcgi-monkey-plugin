@@ -192,30 +192,6 @@ error:
 
 #undef __write_param
 
-int _mkp_init(struct plugin_api **api, char *confdir)
-{
-	mk_api = *api;
-
-	chunk_module_init(mk_api->mem_alloc, mk_api->mem_free);
-	request_module_init(mk_api->mem_alloc, mk_api->mem_free);
-	fcgi_fd_module_init(mk_api->mem_alloc, mk_api->mem_free);
-	fcgi_thread_data_module_init(mk_api->mem_alloc, mk_api->mem_free);
-
-	check(!fcgi_validate_struct_sizes(),
-		"Validating struct sizes failed.");
-	check(!fcgi_config_read(&fcgi_global_config, confdir),
-		"Failed to read config.");
-
-	return 0;
-error:
-	return -1;
-}
-
-void _mkp_exit()
-{
-	fcgi_config_free(&fcgi_global_config);
-}
-
 static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
 {
 	size_t cnt = 0, i;
@@ -673,6 +649,34 @@ error:
 		request_set_state(req, REQ_FAILED);
 	}
 	return MK_PLUGIN_RET_CLOSE_CONX;
+}
+
+int _mkp_init(struct plugin_api **api, char *confdir)
+{
+	mk_api = *api;
+
+	chunk_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	request_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	fcgi_fd_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	fcgi_context_module_init(mk_api->mem_alloc, mk_api->mem_free);
+
+	check(!fcgi_validate_struct_sizes(),
+		"Validating struct sizes failed.");
+	check(!fcgi_config_read(&fcgi_global_config, confdir),
+		"Failed to read config.");
+
+	return 0;
+error:
+	return -1;
+}
+
+void _mkp_exit()
+{
+	PLUGIN_TRACE("Free thread context list.");
+	fcgi_context_list_free(&fcgi_global_context_list);
+
+	PLUGIN_TRACE("Free configuration.");
+	fcgi_config_free(&fcgi_global_config);
 }
 
 void _mkp_core_thctx(void)
