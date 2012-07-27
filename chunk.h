@@ -26,6 +26,30 @@ struct chunk_list {
 	struct chunk chunks;
 };
 
+enum chunk_ref_type {
+	CHUNK_REF_NULL = 0,
+	CHUNK_REF_CHUNK,
+	CHUNK_REF_UINT8,
+};
+
+union chunk_ref_union {
+	struct chunk *chunk;
+	uint8_t *ptr;
+};
+
+struct chunk_ref {
+	enum chunk_ref_type t;
+	union chunk_ref_union u;
+};
+
+struct chunk_iov {
+	int index;
+	int size;
+
+	struct chunk_ref *held_refs;
+	struct iovec *io;
+};
+
 #define CHUNK_SIZE(SIZE) (SIZE) - offsetof(struct chunk, data)
 
 void chunk_module_init(void *(*mem_alloc_f)(const size_t),
@@ -57,5 +81,49 @@ int chunk_list_add(struct chunk_list *cm, struct chunk *a, size_t inherit);
 void chunk_list_stats(struct chunk_list *cm);
 
 void chunk_list_free_chunks(struct chunk_list *cm);
+
+
+int chunk_iov_init(struct chunk_iov *iov, int size);
+
+/**
+ * chunk_iov_length - Returns total length of iov entries.
+ */
+size_t chunk_iov_length(struct chunk_iov *iov);
+
+/**
+ * chunk_iov_sendv - Writes data in iov to file descriptor.
+ */
+ssize_t chunk_iov_sendv(int fd, struct chunk_iov *iov);
+
+/**
+ * chunk_iov_add - Adds chunk entry to chunk_iov.
+ *
+ * Adds chunk data and creates chunk_ref entry in chunk_iov. Retains
+ * chunk_ptr parent.
+ */
+int chunk_iov_add(struct chunk_iov *iov, struct chunk_ptr cp);
+
+/**
+ * chunk_iov_add_ptr - Adds ptr entry to chunk_iov.
+ * @do_free: bool, true (1) will free data when done.
+ *
+ * Adds ptr data and creates chunk_ref.
+ */
+int chunk_iov_add_ptr(struct chunk_iov *iov,
+		void *vptr,
+		size_t len,
+		int do_free);
+
+/**
+ * chunk_iov_reset - Clear iov for reuse.
+ *
+ * Frees all held references and resets index.
+ */
+void chunk_iov_reset(struct chunk_iov *iov);
+
+/**
+ * chunk_iov_free - Free iov resources.
+ */
+void chunk_iov_free(struct chunk_iov *iov);
 
 #endif // __MK_CHUNK__

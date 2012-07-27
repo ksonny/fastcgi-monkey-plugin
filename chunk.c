@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <sys/uio.h>
 
 #include "dbg.h"
 #include "chunk.h"
@@ -215,4 +216,142 @@ void chunk_list_free_chunks(struct chunk_list *cm)
 		c = mk_list_entry(head, struct chunk, _head);
 		chunk_free(c);
 	}
+}
+
+
+int chunk_iov_init(struct chunk_iov *iov, int size)
+{
+	iov->held_refs = mem_alloc(size * sizeof(*iov->held_refs));
+	check_mem(iov->held_refs);
+
+	iov->io = mem_alloc(size * sizeof(*iov->io));
+	check_mem(iov->io);
+
+	iov->size = size;
+	iov->index = 0;
+
+	return 0;
+error:
+	return -1;
+}
+
+size_t chunk_iov_length(struct chunk_iov *iov)
+{
+	size_t s = 0;
+	int i;
+
+	for (i = 0; i < iov->index; i++) {
+		s += iov->io[i].iov_len;
+	}
+
+	return s;
+}
+
+ssize_t chunk_iov_sendv(int fd, struct chunk_iov *iov)
+{
+	check_debug(iov->index > 0, "Tried sending empty chunk_iov.");
+
+	return writev(fd, iov->io, iov->index);
+error:
+	return 0;
+}
+
+int chunk_iov_add(struct chunk_iov *iov, struct chunk_ptr cp)
+{
+	struct chunk_ref *cr;
+	struct iovec *io;
+
+	check(iov->index < iov->size, "chunk_iov is full.");
+	check(cp.len > 0, "tried to add empty chunk_ptr");
+
+	cr = iov->held_refs + iov->index;
+	io = iov->io + iov->index;
+
+	iov->index += 1;
+
+	chunk_retain(cp.parent);
+
+	cr->t = CHUNK_REF_CHUNK;
+	cr->u.chunk = cp.parent;
+
+	io->iov_len = cp.len;
+	io->iov_base = cp.data;
+
+	return 0;
+error:
+	return -1;
+}
+
+int chunk_iov_add_ptr(struct chunk_iov *iov,
+		void *vptr,
+		size_t len,
+		int do_free)
+{
+	struct chunk_ref *cr;
+	struct iovec *io;
+	uint8_t *ptr = vptr;
+
+	check(iov->index < iov->size, "chunk_iov is full.");
+	check(len > 0, "tried to add ptr with len = 0.");
+
+	cr = iov->held_refs + iov->index;
+	io = iov->io + iov->index;
+
+	iov->index += 1;
+
+	if (do_free) {
+		cr->t = CHUNK_REF_UINT8;
+		cr->u.ptr = ptr;
+	} else {
+		cr->t = CHUNK_REF_NULL;
+	}
+
+	io->iov_len = len;
+	io->iov_base = ptr;
+
+	return 0;
+error:
+	return -1;
+}
+
+static void chunk_iov_free_refs(struct chunk_iov *iov)
+{
+	int i;
+	struct chunk_ref *cr;
+
+	for (i = 0; i < iov->index; i++) {
+		cr = iov->held_refs + i;
+
+		if (cr->t == CHUNK_REF_CHUNK) {
+			chunk_release(cr->u.chunk);
+		}
+		else if (cr->t == CHUNK_REF_UINT8) {
+			mem_free(cr->u.ptr);
+		}
+
+		cr->t = CHUNK_REF_NULL;
+	}
+}
+
+void chunk_iov_reset(struct chunk_iov *iov)
+{
+	chunk_iov_free_refs(iov);
+	iov->index = 0;
+}
+
+void chunk_iov_free(struct chunk_iov *iov)
+{
+	chunk_iov_free_refs(iov);
+
+	if (iov->io) {
+		mem_free(iov->io);
+		iov->io = NULL;
+	}
+	if (iov->held_refs) {
+		mem_free(iov->held_refs);
+		iov->held_refs = NULL;
+	}
+
+	iov->index = 0;
+	iov->size = 0;
 }
