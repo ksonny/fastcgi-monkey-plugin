@@ -1,8 +1,6 @@
 #ifndef __FCGI_REQUEST__
 #define __FCGI_REQUEST__
 
-#include "mk_iov.h"
-
 #include "protocol.h"
 #include "chunk.h"
 
@@ -30,10 +28,10 @@ struct request {
 	int fd;
 	int fcgi_fd;
 
-	struct client_session *ccs;
+	struct client_session *cs;
 	struct session_request *sr;
-	struct chunk **cs;
-	struct mk_iov iov;
+
+	struct chunk_iov iov;
 };
 
 /** struct request_list - tracks list of requests
@@ -67,8 +65,6 @@ int request_recycle(struct request *req);
 ssize_t request_add_pkg(struct request *req,
 		struct fcgi_header h,
 		struct chunk_ptr cp);
-
-void request_release_chunks(struct request *req);
 
 void request_free(struct request *req);
 

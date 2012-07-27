@@ -362,7 +362,7 @@ int fcgi_prepare_request(struct request *req)
 
 	req_id = request_list_index_of(&tdata.rl, req);
 	check(req_id > 0, "Bad request id: %d.", req_id);
-	env    = fcgi_create_env(req->ccs, req->sr);
+	env = fcgi_create_env(req->cs, req->sr);
 
 	check(req_id != -1, "Could not get index of request.");
 
@@ -393,10 +393,10 @@ int fcgi_prepare_request(struct request *req)
 	h.body_len = 0;
 	fcgi_write_header(p3 + sizeof(h), &h);
 
-	mk_api->iov_add_entry(&req->iov, (char *)p1, len1, mk_iov_none, 1);
-	mk_api->iov_add_entry(&req->iov, (char *)p2, len2, mk_iov_none, 0);
-	mk_api->iov_add_entry(&req->iov, env.data, env.len, mk_iov_none, 1);
-	mk_api->iov_add_entry(&req->iov, (char *)p3, len3, mk_iov_none, 0);
+	chunk_iov_add_ptr(&req->iov, p1, len1, 1);
+	chunk_iov_add_ptr(&req->iov, p2, len2, 0);
+	chunk_iov_add_ptr(&req->iov, env.data, env.len, 1);
+	chunk_iov_add_ptr(&req->iov, p3, len3, 0);
 
 	return 0;
 error:
@@ -407,14 +407,15 @@ error:
 
 int fcgi_send_request(struct request *req, struct fcgi_fd *fd)
 {
-	check(mk_api->socket_sendv(fd->fd, &req->iov) > 0,
+	check(chunk_iov_sendv(fd->fd, &req->iov) > 0,
 		"Socket error occured.");
 	check(!request_set_state(req, REQ_SENT),
 		"Failed to set req state.");
-	request_release_chunks(req);
+
+	chunk_iov_reset(&req->iov);
 	return 0;
 error:
-	request_release_chunks(req);
+	chunk_iov_reset(&req->iov);
 	return -1;
 }
 
@@ -444,19 +445,25 @@ error:
 int fcgi_end_request(struct request *req)
 {
 	ssize_t headers_offset;
+	ssize_t ret;
 
 	headers_offset = fcgi_parse_cgi_headers(req->iov.io[0].iov_base,
 			req->iov.io[0].iov_len);
 
 	mk_api->header_set_http_status(req->sr,  MK_HTTP_OK);
 	req->sr->headers.cgi = SH_CGI;
-	req->sr->headers.content_length = req->iov.total_len - headers_offset;
+	req->sr->headers.content_length =
+		chunk_iov_length(&req->iov) - headers_offset;
 
-	mk_api->header_send(req->fd, req->ccs, req->sr);
-	mk_api->socket_sendv(req->fd, &req->iov);
+	mk_api->header_send(req->fd, req->cs, req->sr);
+	ret = chunk_iov_sendv(req->fd, &req->iov);
+	check(ret, "Failed to send end_request.");
+	mk_api->socket_cork_flag(req->fd, TCP_CORK_OFF);
 
-	request_release_chunks(req);
+	chunk_iov_reset(&req->iov);
 	return 0;
+error:
+	return -1;
 }
 
 static int fcgi_handle_pkg(struct fcgi_fd *fd,
@@ -741,9 +748,9 @@ static int hangup(int socket)
 			if (req->state != REQ_FAILED) {
 				request_set_state(req, REQ_FAILED);
 			}
-			req->fd  = -1;
-			req->ccs = NULL;
-			req->sr  = NULL;
+			req->fd = -1;
+			req->cs = NULL;
+			req->sr = NULL;
 		}
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
@@ -813,7 +820,7 @@ int _mkp_event_write(int socket)
 		if (req && req->state == REQ_FAILED) {
 			log_info("[FD %d] We have failed request!", req->fd);
 
-			request_release_chunks(req);
+			chunk_iov_reset(&req->iov);
 
 			check(!fcgi_send_abort_request(req, fd),
 				"[FD %d] Failed to send abort request.", fd->fd);

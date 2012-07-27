@@ -15,50 +15,25 @@ void request_module_init(void *(*mem_alloc_p)(const size_t),
 	mem_free  = mem_free_p;
 }
 
-int request_init(struct request *preq, size_t iov_n)
+int request_init(struct request *req, size_t iov_n)
 {
-	struct request req = {
-		.state   = REQ_AVAILABLE,
-		.flags   = 0,
+	*req = (struct request){
+		.state = REQ_AVAILABLE,
+		.flags = 0,
 
-		.fd      = -1,
+		.fd = -1,
 		.fcgi_fd = -1,
 
-		.ccs     = NULL,
-		.sr      = NULL,
-		.cs      = NULL,
+		.cs = NULL,
+		.sr = NULL,
 
-		.iov     = {
-			.buf_to_free = NULL,
-			.iov_idx     = 0,
-			.buf_idx     = 0,
-			.size        = iov_n,
-			.total_len   = 0,
-			.io          = NULL,
-		},
+		.iov = {0},
 	};
-	struct chunk **cs  = NULL;
-	struct iovec *io   = NULL;
-	char **buf_to_free = NULL;
-  
-	io = mem_alloc(iov_n * sizeof(*io));
-	check_mem(io);
 
-	cs = mem_alloc(iov_n * sizeof(*cs));
-	check_mem(cs);
+	check(!chunk_iov_init(&req->iov, iov_n), "Failed to init chunk_iov.");
 
-	buf_to_free = mem_alloc(iov_n * sizeof(*buf_to_free));
-	check_mem(buf_to_free);
-
-	req.cs              = cs;
-	req.iov.io          = io;
-	req.iov.buf_to_free = buf_to_free;
-
-	memcpy(preq, &req, sizeof(req));
 	return 0;
 error:
-	if (io) mem_free(io);
-	if (cs) mem_free(cs);
 	return -1;
 }
 
@@ -68,9 +43,8 @@ static void request_reset(struct request *req)
 	req->flags         = 0;
 	req->fd            = -1;
 	req->fcgi_fd       = -1;
-	req->iov.iov_idx   = 0;
-	req->iov.buf_idx   = 0;
-	req->iov.total_len = 0;
+
+	chunk_iov_reset(&req->iov);
 }
 
 int request_set_state(struct request *req, enum request_state state)
@@ -128,9 +102,9 @@ int request_assign(struct request *req,
 	check_debug(!request_set_state(req, REQ_ASSIGNED),
 		"Failed to set request state.");
 
-	req->fd    = fd;
-	req->ccs   = cs;
-	req->sr    = sr;
+	req->fd = fd;
+	req->cs = cs;
+	req->sr = sr;
 	return 0;
 error:
 	return -1;
@@ -147,33 +121,8 @@ int request_recycle(struct request *req)
 		log_warn("Recycling still running request.");
 	}
 
-	request_release_chunks(req);
 	request_reset(req);
 	return 0;
-}
-
-static int request_iov_add_entry(struct mk_iov *iov,
-	uint8_t *buf,
-	size_t len,
-	int free)
-{
-	check(iov->size > iov->iov_idx, "Index out of bounds.");
-
-	if (buf) {
-		iov->io[iov->iov_idx].iov_base = buf;
-		iov->io[iov->iov_idx].iov_len  = len;
-		iov->iov_idx++;
-		iov->total_len += len;
-	}
-
-	if (free == 1) {
-		iov->buf_to_free[iov->buf_idx] = (char *)buf;
-		iov->buf_idx++;
-	}
-
-	return iov->iov_idx;
-error:
-	return -1;
 }
 
 ssize_t request_add_pkg(struct request *req,
@@ -184,15 +133,11 @@ ssize_t request_add_pkg(struct request *req,
 
 	check(cp.len >= pkg_length, "Missing package data.");
 	check(req->state == REQ_SENT, "Request not yet sent.");
-	check(h.type == FCGI_STDOUT, "Tried to add pkg of bad type.");
 
-	chunk_retain(cp.parent);
-	req->cs[req->iov.iov_idx] = cp.parent;
+	cp.data += sizeof(h);
+	cp.len = h.body_len;
 
-	request_iov_add_entry(&req->iov,
-			cp.data + sizeof(h),
-			h.body_len,
-			0);
+	chunk_iov_add(&req->iov, cp);
 
 	return pkg_length;
 error:
@@ -200,38 +145,10 @@ error:
 	
 }
 
-void request_release_chunks(struct request *req)
-{
-	int i;
-
-	for (i = 0; i < req->iov.iov_idx; i++) {
-		if (req->cs[i]) {
-			chunk_release(req->cs[i]);
-			req->cs[i] = NULL;
-		}
-	}
-	for (i = 0; i < req->iov.buf_idx; i++) {
-		if (req->iov.buf_to_free[i]) {
-			mem_free(req->iov.buf_to_free[i]);
-			req->iov.buf_to_free[i] = NULL;
-		}
-	}
-	req->iov.iov_idx   = 0;
-	req->iov.buf_idx   = 0;
-	req->iov.total_len = 0;
-}
-
 void request_free(struct request *req)
 {
 	request_reset(req);
-	if (req->cs) {
-		mem_free(req->cs);
-		req->cs = NULL;
-	}
-	if (req->iov.io) {
-		mem_free(req->iov.io);
-		req->iov.io = NULL;
-	}
+	chunk_iov_free(&req->iov);
 }
 
 int request_list_init(struct request_list *rl, int id_offset, int n)
