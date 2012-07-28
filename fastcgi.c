@@ -315,8 +315,7 @@ int fcgi_wake_connection()
 	return 0;
 }
 
-int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
-		struct session_request *sr)
+int fcgi_new_connection(struct plugin *plugin)
 {
 	struct fcgi_fd *fd;
 
@@ -330,7 +329,6 @@ int fcgi_new_connection(struct plugin *plugin, struct client_session *cs,
 		mk_api->event_add(fd->fd,
 				MK_EPOLL_RW,
 				plugin,
-				cs, sr,
 				MK_EPOLL_LEVEL_TRIGGERED);
 
 		fcgi_fd_set_state(fd, FCGI_FD_READY);
@@ -677,7 +675,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	if (fcgi_wake_connection()) {
 		PLUGIN_TRACE("[REQ_ID %d] Create new fcgi connection.", req_id);
-		check_debug(!fcgi_new_connection(plugin, cs, sr),
+		check_debug(!fcgi_new_connection(plugin),
 			"New connection failed seriously.");
 	} else {
 		PLUGIN_TRACE("[REQ_ID %d] Found connection available.", req_id);
