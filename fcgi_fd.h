@@ -1,6 +1,8 @@
 #ifndef __FCGI_FD__
 #define __FCGI_FD__
 
+#include "fcgi_config.h"
+
 enum fcgi_fd_state {
 	FCGI_FD_AVAILABLE = 1,
 	FCGI_FD_READY     = 2,
@@ -24,17 +26,17 @@ struct fcgi_fd_list {
 void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *));
 
-void fcgi_fd_init(struct fcgi_fd *fd);
+void fcgi_fd_init(struct fcgi_fd *fd, int server_id, int location_id);
 
 int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state);
 
-int fcgi_fd_list_init(struct fcgi_fd_list *fdl, int n);
+int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config);
 
 void fcgi_fd_list_free(struct fcgi_fd_list *fdl);
 
 struct fcgi_fd *fcgi_fd_list_get(struct fcgi_fd_list *fdl,
-		int location_id,
-		enum fcgi_fd_state state);
+		enum fcgi_fd_state state,
+		int location_id);
 
 struct fcgi_fd *fcgi_fd_list_get_by_fd(struct fcgi_fd_list *fdl, int fd);
 
