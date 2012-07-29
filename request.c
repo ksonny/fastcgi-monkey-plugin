@@ -75,7 +75,8 @@ int request_set_state(struct request *req, enum request_state state)
 		break;
 	case REQ_ENDED:
 		check(req->state == REQ_STREAM_CLOSED ||
-			req->state == REQ_FAILED,
+			req->state == REQ_FAILED ||
+			req->state == REQ_SENT,
 			"Bad state transition REQ_ENDED.");
 		req->state = REQ_ENDED;
 		break;

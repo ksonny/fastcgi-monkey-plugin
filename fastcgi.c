@@ -489,17 +489,16 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 		check(!fcgi_fd_set_state(fd, FCGI_FD_READY),
 			"Failed to set fd state.");
 
-		if (req->state == REQ_STREAM_CLOSED) {
-			check(!request_set_state(req, REQ_ENDED),
-				"Failed to set request state.");
-			mk_api->event_socket_change_mode(req->fd,
-				MK_EPOLL_WRITE,
-				MK_EPOLL_LEVEL_TRIGGERED);
-		}
-		else if (req->state == REQ_FAILED && req->fd == -1) {
+		if (req->state == REQ_FAILED && req->fd == -1) {
 			request_recycle(req);
 		}
 
+		PLUGIN_TRACE("[REQ_ID %d] Ending request.", h.req_id);
+		check(!request_set_state(req, REQ_ENDED),
+			"Failed to set request state.");
+		mk_api->event_socket_change_mode(req->fd,
+			MK_EPOLL_WRITE,
+			MK_EPOLL_LEVEL_TRIGGERED);
 		break;
 	case 0:
 		sentinel("[REQ %d] Received NULL package.", h.req_id);
