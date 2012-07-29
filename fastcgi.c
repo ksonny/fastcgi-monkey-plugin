@@ -312,8 +312,10 @@ int fcgi_prepare_request(struct request *req)
 	};
 	size_t len1 = sizeof(h) + sizeof(b),
 	       len2 = sizeof(h),
-	       len3 = 2 * sizeof(h);
-	uint8_t *p1 = NULL, *p2 = NULL, *p3 = NULL;
+	       len3 = sizeof(h),
+	       len4 = sizeof(h),
+	       len5 = sizeof(h);
+	uint8_t *p1 = NULL, *p2 = NULL, *p3 = NULL, *p4 = NULL, *p5 = NULL;
 
 	struct fcgi_location *location;
 
@@ -327,10 +329,12 @@ int fcgi_prepare_request(struct request *req)
 	location = fcgi_config_get_location(&fcgi_global_config, req->clock_id);
 	check(location, "[REQ_ID %d] Failed to get location.", req_id);
 
-	p1 = mk_api->mem_alloc(len1 + len2 + len3);
+	p1 = mk_api->mem_alloc(len1 + len2 + len3 + len4 + len5);
 	check_mem(p1);
 	p2 = p1 + len1;
 	p3 = p2 + len2;
+	p4 = p3 + len3;
+	p5 = p4 + len4;
 
 	// Write begin request.
 	h.type     = FCGI_BEGIN_REQUEST;
@@ -350,20 +354,42 @@ int fcgi_prepare_request(struct request *req)
 	h.body_len = 0;
 	fcgi_write_header(p3, &h);
 
-	// Write stdin end.
+	// Write stdin.
 	h.type = FCGI_STDIN;
-	h.body_len = 0;
-	fcgi_write_header(p3 + sizeof(h), &h);
+	if (req->sr->data.len > 0) {
+		h.body_len = req->sr->data.len;
+		fcgi_write_header(p4, &h);
 
-	chunk_iov_add_ptr(&req->iov, p1, len1, 1);
-	chunk_iov_add_ptr(&req->iov, p2, len2, 0);
-	chunk_iov_add_ptr(&req->iov, env.data, env.len, 1);
-	chunk_iov_add_ptr(&req->iov, p3, len3, 0);
+		h.body_len = 0;
+		fcgi_write_header(p5, &h);
+	}
+	else {
+		h.body_len = 0;
+		fcgi_write_header(p4, &h);
+	}
 
+	check(!chunk_iov_add_ptr(&req->iov, p1, len1, 1),
+			"Adding content to iov failed.");
+	check(!chunk_iov_add_ptr(&req->iov, p2, len2, 0),
+			"Adding content to iov failed.");
+	check(!chunk_iov_add_ptr(&req->iov, env.data, env.len, 1),
+			"Adding content to iov failed.");
+	check(!chunk_iov_add_ptr(&req->iov, p3, len3, 0),
+			"Adding content to iov failed.");
+	check(!chunk_iov_add_ptr(&req->iov, p4, len4, 0),
+			"Adding content to iov failed.");
+
+	if (req->sr->data.len > 0) {
+		check(!chunk_iov_add_ptr(&req->iov,
+				req->sr->data.data,
+				req->sr->data.len, 0),
+			"Adding content to iov failed.");
+		check(!chunk_iov_add_ptr(&req->iov, p5, len5, 0),
+			"Adding content to iov failed.");
+	}
 	return 0;
 error:
-	if (p1) mk_api->mem_free(p1);
-	if (env.data) mk_api->mem_free(env.data);
+	chunk_iov_reset(&req->iov);
 	return -1;
 }
 
