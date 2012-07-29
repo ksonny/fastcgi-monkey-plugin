@@ -440,10 +440,14 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 
 	switch (h.type) {
 	case FCGI_STDERR:
-		log_warn("[REQ %d] Received stderr.", h.req_id);
+		PLUGIN_TRACE("[REQ_ID %d] Recevied stderr, len %d.",
+				h.req_id, h.body_len);
+		log_err("[REQ %d] %.*s", h.req_id, h.body_len, read.data + sizeof(h));
 		break;
 
 	case FCGI_STDOUT:
+		PLUGIN_TRACE("[REQ_ID %d] Recevied stdout, len %d",
+				h.req_id, h.body_len);
 		if (h.body_len == 0) {
 			check(!request_set_state(req, REQ_STREAM_CLOSED),
 				"Failed to set request state.");
@@ -455,6 +459,8 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 		break;
 
 	case FCGI_END_REQUEST:
+		PLUGIN_TRACE("[REQ_ID %d] Recevied end request, len %d.",
+				h.req_id, h.body_len);
 		fcgi_read_end_req_body(read.data + sizeof(h), &b);
 
 		switch (b.app_status) {
