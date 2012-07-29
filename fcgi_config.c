@@ -56,13 +56,19 @@ void fcgi_config_free(struct fcgi_config *config)
 
 static int fcgi_validate_conf(struct fcgi_config *config)
 {
-	int i = 0;
+	int i, j;
 	struct fcgi_location *locp;
 	struct fcgi_server *srvp;
+	ptrdiff_t srv_i;
+	uint8_t used_servers[config->server_count];
 
 	check(config->server_count > 0, "No servers configured.");
 	check(config->location_count > 0, "No locations configured.");
 	check(config->location_count < UINT16_MAX, "Too many locations.");
+
+	for (i = 0; i < config->server_count; i++) {
+		used_servers[i] = 0;
+	}
 
 	for (i = 0; i < config->location_count; i++) {
 
@@ -70,11 +76,25 @@ static int fcgi_validate_conf(struct fcgi_config *config)
 
 		check(locp->server_count > 0,
 			"No servers configured for location %d.", i);
+
+		for (j = 0; j < locp->server_count; j++) {
+			srv_i = locp->servers[j] - config->servers;
+			check(srv_i >= 0 && srv_i < config->server_count,
+				"Location server index out of range.");
+			used_servers[srv_i] += 1;
+		}
 	}
 
 	for (i = 0; i < config->server_count; i++) {
 
 		srvp = config->servers + i;
+
+		check(used_servers[i] < 2,
+			"Server %s used by multiple locations.", srvp->name);
+
+		if (used_servers[i] == 0) {
+			log_warn("Server %s is unused.", srvp->name);
+		}
 
 		check((srvp->addr && srvp->port) || srvp->path,
 			"No valid socket for server %s.", srvp->name);
