@@ -8,6 +8,23 @@
 static void *(*mem_alloc)(const size_t) = &malloc;
 static void (*mem_free)(void *) = free;
 
+uint16_t next_power_of_2(uint16_t v)
+{
+	v--;
+	v |= v >> 1;
+	v |= v >> 2;
+	v |= v >> 4;
+	v |= v >> 8;
+	v++;
+
+	return v;
+}
+
+uint16_t is_power_of_2(uint16_t v)
+{
+	return ((v != 0) && !(v & (v - 1)));
+}
+
 void request_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *))
 {
@@ -166,6 +183,8 @@ int request_list_init(struct request_list *rl,
 	struct request *tmp = NULL;
 	uint16_t i;
 
+	check(is_power_of_2(size), "Size must be power of 2, it is %d", size);
+
 	clock_hands = mem_alloc(clock_count * sizeof(*clock_hands));
 	check_mem(clock_hands);
 
@@ -223,57 +242,71 @@ error:
 struct request *request_list_next_available(struct request_list *rl,
 		uint16_t clock_id)
 {
-	uint16_t i, n = rl->size, clock = get_clock_hand(rl, clock_id);
+	uint16_t i, mask = rl->size - 1, clock = get_clock_hand(rl, clock_id);
 	struct request *r;
 
-	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
+	i = clock;
+	do {
+		i = (i + 1) & mask;
 		r = rl->rs + i;
 		if (r->state == REQ_AVAILABLE) {
 			return r;
 		}
-	}
+	} while (i != clock);
+
 	return NULL;
 }
 
 struct request *request_list_next_assigned(struct request_list *rl,
 		uint16_t clock_id)
 {
-	uint16_t i, n = rl->size, clock = get_clock_hand(rl, clock_id);
+	uint16_t i, mask = rl->size - 1, clock = get_clock_hand(rl, clock_id);
 	struct request *r;
 
-	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
+	i = clock;
+	do {
+		i = (i + 1) & mask;
 		r = rl->rs + i;
 		if (r->state == REQ_ASSIGNED && r->clock_id == clock_id) {
 			set_clock_hand(rl, clock_id, i);
 			return r;
 		}
-	}
+	} while (i != clock);
+
 	return NULL;
 }
 
 struct request *request_list_get_by_fd(struct request_list *rl, int fd)
 {
-	uint16_t i;
-	struct request *r = NULL;
+	uint16_t i, mask = rl->size -1, clock = get_clock_hand(rl, 0);
+	struct request *r;
 
-	for (i = 0; i < rl->size; i++) {
+	i = clock;
+	do {
+		i = (i + 1) & mask;
 		r = rl->rs + i;
-		if (r->fd == fd)
+		if (r->fd == fd) {
 			return r;
-	}
+		}
+	} while (i != clock);
+
 	return NULL;
 }
 
 struct request *request_list_get_by_fcgi_fd(struct request_list *rl, int fd)
 {
-	uint16_t i;
-	struct request *r = NULL;
+	uint16_t i, mask = rl->size -1, clock = get_clock_hand(rl, 0);
+	struct request *r;
 
-	for (i = 0; i < rl->size; i++) {
+	i = clock;
+	do {
 		r = rl->rs + i;
-		if (r->fcgi_fd == fd)
+		if (r->fcgi_fd == fd) {
 			return r;
-	}
+		}
+		i = (i + 1) & mask;
+	} while (i != clock);
+
 	return NULL;
 }
 

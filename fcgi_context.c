@@ -69,7 +69,7 @@ int fcgi_context_list_init(struct fcgi_context_list *tdlist,
 		int worker_capacity)
 {
 	struct fcgi_context *tdata;
-	const uint16_t request_capacity = worker_capacity;
+	const uint16_t request_capacity = next_power_of_2(worker_capacity);
 	uint16_t request_offset = 1;
 	int i;
 
@@ -97,7 +97,7 @@ int fcgi_context_list_init(struct fcgi_context_list *tdlist,
 		request_offset += request_capacity;
 	}
 
-	check(request_offset == workers * worker_capacity + 1,
+	check(request_offset == workers * request_capacity + 1,
 		"You can't freaking count!");
 
 	return 0;

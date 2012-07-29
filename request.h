@@ -53,6 +53,10 @@ struct request_list {
 	struct request *rs;
 };
 
+uint16_t next_power_of_2(uint16_t v);
+
+uint16_t is_power_of_2(uint16_t v);
+
 void request_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *));
 
