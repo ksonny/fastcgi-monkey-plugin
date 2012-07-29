@@ -173,12 +173,16 @@ int fcgi_config_read_location(struct fcgi_location *loc,
 	char *keep_alive = NULL;
 	char *tok;
 
+	loc->name = mk_api->config_section_getval(section, "LocationName",
+			MK_CONFIG_VAL_STR);
 	regex = mk_api->config_section_getval(section, "Match",
 			MK_CONFIG_VAL_STR);
 	keep_alive = mk_api->config_section_getval(section, "KeepAlive",
 			MK_CONFIG_VAL_STR);
 	server_names = mk_api->config_section_getval(section, "ServerNames",
 			MK_CONFIG_VAL_STR);
+
+	check(loc->name, "No name for this location!");
 
 	check(regex, "No match regex defined for this location.");
 	for (tok = regex; *tok != '\0'; tok++) {
@@ -215,7 +219,8 @@ int fcgi_config_read_location(struct fcgi_location *loc,
 			loc_server_i++;
 		}
 	}
-	check(loc_server_i, "Non of servers in ServerNames declared.");
+	check(loc_server_i, "[LOC %s] Non of servers in ServerNames declared.",
+			loc->name);
 	loc->server_count = loc_server_i;
 	mk_api->mem_free(server_names);
 

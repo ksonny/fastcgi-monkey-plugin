@@ -17,6 +17,7 @@ struct fcgi_server {
 };
 
 struct fcgi_location {
+	char *name;
 	regex_t match_regex;
 
 	int keep_alive;
