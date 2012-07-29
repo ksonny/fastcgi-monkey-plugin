@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <pthread.h>
 
@@ -68,9 +69,12 @@ int fcgi_context_list_init(struct fcgi_context_list *tdlist,
 		int worker_capacity)
 {
 	struct fcgi_context *tdata;
-	const int request_capacity = worker_capacity;
-	int request_offset = 1;
+	const uint16_t request_capacity = worker_capacity;
+	uint16_t request_offset = 1;
 	int i;
+
+	check(request_capacity > 0, "No request capacity.");
+	check(request_capacity < UINT16_MAX, "Request capacity too large.");
 
 	tdlist->thread_id_counter = 0;
 	pthread_mutex_init(&tdlist->thread_id_counter_mutex, NULL);

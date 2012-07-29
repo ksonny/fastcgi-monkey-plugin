@@ -28,7 +28,7 @@ struct request {
 	int fd;
 	int fcgi_fd;
 
-	int clock_id;
+	uint16_t clock_id;
 
 	struct client_session *cs;
 	struct session_request *sr;
@@ -39,26 +39,30 @@ struct request {
 /** struct request_list - tracks list of requests
  * @n: Number of entries in list.
  * @id_offset: Substracted from req_id to get index in list.
- * @clock_hand: Used with _next_ function to implement round robin.
+ * @clock_count: Number of clock hands available.
+ * @clock_hands: Used with _next_ function to implement round robin.
+ *
+ * A request list may contain up to UINT16_T entries as that's the
+ * maximum number of entries possible to send in a fastcgi header.
  */
 struct request_list {
-	int n;
-	int id_offset;
-	int clock_count;
-	int *clock_hands;
+	uint16_t size;
+	uint16_t id_offset;
+	uint16_t clock_count;
+	uint16_t *clock_hands;
 	struct request *rs;
 };
 
 void request_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *));
 
-int request_init(struct request *preq, size_t iov_n);
+int request_init(struct request *preq, int iov_n);
 
 int request_set_state(struct request *req, enum request_state state);
 
 int request_assign(struct request *req,
 	int fd,
-	int location_id,
+	uint16_t clock_id,
 	struct client_session *cs,
 	struct session_request *sr);
 
@@ -74,16 +78,17 @@ void request_free(struct request *req);
 
 
 int request_list_init(struct request_list *rl,
-		int clock_count,
-		int id_offset,
-		int n);
+		uint16_t clock_count,
+		uint16_t id_offset,
+		uint16_t size);
 
 /*
  * Gets next available request, starting from rl->clock_hand.
  *
  * Returns NULL on failure, otherwise pointer to struct request.
  */
-struct request *request_list_next_available(struct request_list *rl, int clock_id);
+struct request *request_list_next_available(struct request_list *rl,
+		uint16_t clock_id);
 
 /*
  * Gets next assigned request, starting from .clock_hand. The clock_hand
@@ -91,7 +96,8 @@ struct request *request_list_next_available(struct request_list *rl, int clock_i
  *
  * Returns NULL on failure, otherwise pointer to struct request.
  */
-struct request *request_list_next_assigned(struct request_list *rl, int clock_id);
+struct request *request_list_next_assigned(struct request_list *rl,
+		uint16_t clock_id);
 
 struct request *request_list_get_by_fd(struct request_list *rl, int fd);
 
@@ -99,7 +105,7 @@ struct request *request_list_get_by_fcgi_fd(struct request_list *rl, int fd);
 
 struct request *request_list_get(struct request_list *rl, uint16_t req_id);
 
-int request_list_index_of(struct request_list *rl, struct request *r);
+uint16_t request_list_index_of(struct request_list *rl, struct request *r);
 
 void request_list_free(struct request_list *rl);
 

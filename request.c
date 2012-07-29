@@ -15,7 +15,7 @@ void request_module_init(void *(*mem_alloc_p)(const size_t),
 	mem_free  = mem_free_p;
 }
 
-int request_init(struct request *req, size_t iov_n)
+int request_init(struct request *req, int iov_n)
 {
 	*req = (struct request){
 		.state = REQ_AVAILABLE,
@@ -24,7 +24,7 @@ int request_init(struct request *req, size_t iov_n)
 		.fd = -1,
 		.fcgi_fd = -1,
 
-		.clock_id = -1,
+		.clock_id = 0,
 		.cs = NULL,
 		.sr = NULL,
 
@@ -44,7 +44,7 @@ static void request_reset(struct request *req)
 	req->flags         = 0;
 	req->fd            = -1;
 	req->fcgi_fd       = -1;
-	req->clock_id      = -1;
+	req->clock_id      = 0;
 
 	chunk_iov_reset(&req->iov);
 }
@@ -99,7 +99,7 @@ error:
 
 int request_assign(struct request *req,
 	int fd,
-	int clock_id,
+	uint16_t clock_id,
 	struct client_session *cs,
 	struct session_request *sr)
 {
@@ -158,13 +158,13 @@ void request_free(struct request *req)
 }
 
 int request_list_init(struct request_list *rl,
-		int clock_count,
-		int id_offset,
-		int n)
+		uint16_t clock_count,
+		uint16_t id_offset,
+		uint16_t size)
 {
-	int *clock_hands = NULL;
+	uint16_t *clock_hands = NULL;
 	struct request *tmp = NULL;
-	int i;
+	uint16_t i;
 
 	clock_hands = mem_alloc(clock_count * sizeof(*clock_hands));
 	check_mem(clock_hands);
@@ -173,15 +173,15 @@ int request_list_init(struct request_list *rl,
 		clock_hands[i] = 0;
 	}
 
-	tmp = mem_alloc(n * sizeof(*tmp));
+	tmp = mem_alloc(size * sizeof(*tmp));
 	check_mem(tmp);
 
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < size; i++) {
 		check(!request_init(tmp + i, 8),
 			"Failed to init request %d", i);
 	}
 
-	rl->n = n;
+	rl->size = size;
 	rl->id_offset = id_offset;
 	rl->clock_count = clock_count;
 	rl->clock_hands = clock_hands;
@@ -190,8 +190,8 @@ int request_list_init(struct request_list *rl,
 	return 0;
 error:
 	if (tmp && i > 0) {
-		n = i;
-		for (i = 0; i < n; i++) {
+		size = i;
+		for (i = 0; i < size; i++) {
 			request_free(tmp + i);
 		}
 	}
@@ -199,29 +199,31 @@ error:
 	return -1;
 }
 
-static int get_clock_hand(struct request_list *rl, int loc_id)
+static int get_clock_hand(struct request_list *rl, uint16_t clock_id)
 {
-	check(loc_id >= 0 && loc_id < rl->clock_count,
-		"Location index out of range.");
+	check(clock_id < rl->clock_count, "Clock index out of range.");
 
-	return rl->clock_hands[loc_id];
+	return rl->clock_hands[clock_id];
 error:
 	return 0;
 }
 
-static void set_clock_hand(struct request_list *rl, int loc_id, int clock_hand)
+static void set_clock_hand(struct request_list *rl,
+		uint16_t clock_id,
+		uint16_t clock_hand)
 {
-	check(loc_id >= 0 && loc_id < rl->clock_count,
+	check(clock_id < rl->clock_count,
 		"location index out of range.");
 
-	rl->clock_hands[loc_id] = clock_hand;
+	rl->clock_hands[clock_id] = clock_hand;
 error:
 	return;
 }
 
-struct request *request_list_next_available(struct request_list *rl, int clock_id)
+struct request *request_list_next_available(struct request_list *rl,
+		uint16_t clock_id)
 {
-	int i, n = rl->n, clock = get_clock_hand(rl, clock_id);
+	uint16_t i, n = rl->size, clock = get_clock_hand(rl, clock_id);
 	struct request *r;
 
 	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
@@ -233,9 +235,10 @@ struct request *request_list_next_available(struct request_list *rl, int clock_i
 	return NULL;
 }
 
-struct request *request_list_next_assigned(struct request_list *rl, int clock_id)
+struct request *request_list_next_assigned(struct request_list *rl,
+		uint16_t clock_id)
 {
-	int i, n = rl->n, clock = get_clock_hand(rl, clock_id);
+	uint16_t i, n = rl->size, clock = get_clock_hand(rl, clock_id);
 	struct request *r;
 
 	for (i = (clock + 1) % n; i != clock; i = (i + 1) % n) {
@@ -250,10 +253,10 @@ struct request *request_list_next_assigned(struct request_list *rl, int clock_id
 
 struct request *request_list_get_by_fd(struct request_list *rl, int fd)
 {
-	int i;
+	uint16_t i;
 	struct request *r = NULL;
 
-	for (i = 0; i < rl->n; i++) {
+	for (i = 0; i < rl->size; i++) {
 		r = rl->rs + i;
 		if (r->fd == fd)
 			return r;
@@ -263,10 +266,10 @@ struct request *request_list_get_by_fd(struct request_list *rl, int fd)
 
 struct request *request_list_get_by_fcgi_fd(struct request_list *rl, int fd)
 {
-	int i;
+	uint16_t i;
 	struct request *r = NULL;
 
-	for (i = 0; i < rl->n; i++) {
+	for (i = 0; i < rl->size; i++) {
 		r = rl->rs + i;
 		if (r->fcgi_fd == fd)
 			return r;
@@ -276,10 +279,10 @@ struct request *request_list_get_by_fcgi_fd(struct request_list *rl, int fd)
 
 struct request *request_list_get(struct request_list *rl, uint16_t req_id)
 {
-	int real_req_index = req_id - rl->id_offset;
-	check(req_id > 0,
+	uint16_t real_req_index = req_id - rl->id_offset;
+	check(req_id >= rl->id_offset,
 		"Request id out of range.");
-	check(real_req_index >= 0 && real_req_index < rl->n,
+	check(real_req_index < rl->size,
 		"Request id out of range.");
 
 	return rl->rs + real_req_index;
@@ -287,29 +290,29 @@ error:
 	return NULL;
 }
 
-int request_list_index_of(struct request_list *rl, struct request *r)
+uint16_t request_list_index_of(struct request_list *rl, struct request *r)
 {
 	ptrdiff_t offset = r - rl->rs;
 
-	check(r >= rl->rs && r <= rl->rs + rl->n, "Request not part of list.");
+	check(r >= rl->rs && r <= rl->rs + rl->size, "Request not part of list.");
 
 	return rl->id_offset + offset;
 error:
-	return -1;
+	return 0;
 
 }
 
 void request_list_free(struct request_list *rl)
 {
-	int i;
+	uint16_t i;
 
 	if (!rl)
 		return;
 
-	for (i = 0; i < rl->n; i++) {
+	for (i = 0; i < rl->size; i++) {
 		request_free(rl->rs + i);
 	}
 	mem_free(rl->rs);
-	rl->n  = 0;
+	rl->size = 0;
 	rl->rs = NULL;
 }

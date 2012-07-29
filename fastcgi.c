@@ -320,7 +320,7 @@ int fcgi_prepare_request(struct request *req)
 	struct fcgi_location *location;
 
 	struct request_list *rl = &fcgi_local_context->rl;
-	int req_id = -1;
+	uint16_t req_id = 0;
 	mk_pointer env = fcgi_create_env(req->cs, req->sr);
 
 	req_id = request_list_index_of(rl, req);
@@ -649,7 +649,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	char *uri = NULL;
 	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req = NULL;
-	int req_id;
+	uint16_t req_id;
 	int location_id;
 
 	UNUSED_VARIABLE(plugin);
@@ -791,7 +791,7 @@ static int hangup(int socket)
 	struct fcgi_fd *fd;
 	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req;
-	int req_id;
+	uint16_t req_id;
 	enum fcgi_fd_state state;
 
 	fd  = fcgi_fd_list_get_by_fd(fdl, socket);
@@ -840,7 +840,7 @@ static int hangup(int socket)
 
 int _mkp_event_write(int socket)
 {
-	int req_id;
+	uint16_t req_id;
 	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req = NULL;
 	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
