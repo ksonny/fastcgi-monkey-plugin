@@ -20,10 +20,14 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
               VERSION,			/* version */
               MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX | MK_PLUGIN_CORE_PRCTX);
 
+static struct plugin * fcgi_global_plugin;
+
 static struct fcgi_config fcgi_global_config;
 static struct fcgi_context_list fcgi_global_context_list;
 
 static __thread struct fcgi_context *fcgi_local_context;
+
+#define UNUSED_VARIABLE(var) (void)(var)
 
 #define __write_param(env, len, pos, key, value) do { \
 		check(len - pos > 8 + key.len + value.len, "Out of memory."); \
@@ -265,8 +269,9 @@ error:
 	return -1;
 }
 
-int fcgi_new_connection(struct plugin *plugin, int location_id)
+int fcgi_new_connection(int location_id)
 {
+	struct plugin *plugin = fcgi_global_plugin;
 	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
 	struct fcgi_fd *fd;
 	struct fcgi_server *server;
@@ -616,6 +621,8 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 	int req_id;
 	int location_id;
 
+	UNUSED_VARIABLE(plugin);
+
 	req = request_list_get_by_fd(rl, cs->socket);
 	if (req) {
 #ifdef TRACE
@@ -654,7 +661,7 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	if (fcgi_wake_connection(location_id)) {
 		PLUGIN_TRACE("[REQ_ID %d] Create new fcgi connection.", req_id);
-		check_debug(!fcgi_new_connection(plugin, location_id),
+		check_debug(!fcgi_new_connection(location_id),
 			"New connection failed seriously.");
 	} else {
 		PLUGIN_TRACE("[REQ_ID %d] Found connection available.", req_id);
@@ -707,12 +714,24 @@ void _mkp_exit()
 
 int _mkp_core_prctx(struct server_config *config)
 {
+	struct mk_list *h;
+	struct plugin *p;
+
 	PLUGIN_TRACE("Init thread context list.");
 	check(!fcgi_context_list_init(&fcgi_global_context_list,
 				&fcgi_global_config,
 				config->workers,
 				config->worker_capacity),
 			"Failed to init thread data list.");
+
+	mk_list_foreach(h, config->plugins) {
+
+		p = mk_list_entry(h, struct plugin, _head);
+
+		if (p->shortname == _plugin_info.shortname) {
+			fcgi_global_plugin = p;
+		}
+	}
 
 	return 0;
 error:
@@ -742,6 +761,7 @@ static int hangup(int socket)
 	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req;
 	int req_id;
+	enum fcgi_fd_state state;
 
 	fd  = fcgi_fd_list_get_by_fd(fdl, socket);
 	req = fd ? NULL : request_list_get_by_fd(rl, socket);
@@ -752,8 +772,15 @@ static int hangup(int socket)
 	else if (fd) {
 		PLUGIN_TRACE("[FCGI_FD %d] Hangup event received.", fd->fd);
 
+		state = fd->state;
+
 		fd->fd     = -1;
 		fd->state  = FCGI_FD_AVAILABLE;
+
+		if (state & FCGI_FD_CLOSING) {
+			fcgi_new_connection(fd->location_id);
+		}
+
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
 	else if (req) {
