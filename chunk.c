@@ -336,6 +336,7 @@ int chunk_iov_add_ptr(struct chunk_iov *iov,
 		cr->u.ptr = ptr;
 	} else {
 		cr->t = CHUNK_REF_NULL;
+		cr->u.ptr = NULL;
 	}
 
 	io->iov_len = len;
@@ -356,9 +357,11 @@ static void chunk_iov_free_refs(struct chunk_iov *iov)
 
 		if (cr->t == CHUNK_REF_CHUNK) {
 			chunk_release(cr->u.chunk);
+			cr->u.chunk = NULL;
 		}
 		else if (cr->t == CHUNK_REF_UINT8) {
 			mem_free(cr->u.ptr);
+			cr->u.ptr = NULL;
 		}
 
 		cr->t = CHUNK_REF_NULL;
