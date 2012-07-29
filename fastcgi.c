@@ -719,7 +719,7 @@ int _mkp_init(struct plugin_api **api, char *confdir)
 {
 	mk_api = *api;
 
-	chunk_module_init(mk_api->mem_alloc, mk_api->mem_free);
+	chunk_module_init(mk_api->mem_alloc, mk_api->mem_realloc, mk_api->mem_free);
 	request_module_init(mk_api->mem_alloc, mk_api->mem_free);
 	fcgi_fd_module_init(mk_api->mem_alloc, mk_api->mem_free);
 	fcgi_context_module_init(mk_api->mem_alloc, mk_api->mem_free);

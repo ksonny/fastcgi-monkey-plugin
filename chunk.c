@@ -6,12 +6,15 @@
 
 static void *(*mem_alloc)(const size_t) = &malloc;
 static void (*mem_free)(void *) = &free;
+static void *(*mem_realloc)(void *, const size_t) = &realloc;
 
 void chunk_module_init(void *(*mem_alloc_f)(const size_t),
+		void *(*mem_realloc_f)(void *, const size_t),
 		void (*mem_free_f)(void *))
 {
 	mem_alloc = mem_alloc_f;
-	mem_free  = mem_free_f;
+	mem_realloc = mem_realloc_f;
+	mem_free = mem_free_f;
 }
 
 struct chunk *chunk_new(size_t size)
@@ -232,6 +235,35 @@ int chunk_iov_init(struct chunk_iov *iov, int size)
 
 	return 0;
 error:
+	return -1;
+}
+
+int chunk_iov_resize(struct chunk_iov *iov, int size)
+{
+	struct iovec *tio = NULL;
+	struct chunk_ref *trefs = NULL;
+
+	check(iov->io, "iovec in iov not allocated.");
+	check(iov->held_refs, "held refs in iov is not allocated.");
+
+	tio = mem_realloc(iov->io, size * sizeof(*iov->io));
+	check(tio, "Failed to realloc iovec in iov.");
+
+	trefs = mem_realloc(iov->held_refs, size * sizeof(*iov->held_refs));
+	check(trefs, "Failed to realloc held refs in iov.");
+
+	iov->io = tio;
+	iov->held_refs = trefs;
+	iov->size = size;
+
+	return 0;
+error:
+	if (tio) {
+		iov->io = tio;
+	}
+	if (trefs) {
+		iov->held_refs = trefs;
+	}
 	return -1;
 }
 

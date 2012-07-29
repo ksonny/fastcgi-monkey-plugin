@@ -53,6 +53,7 @@ struct chunk_iov {
 #define CHUNK_SIZE(SIZE) (SIZE) - offsetof(struct chunk, data)
 
 void chunk_module_init(void *(*mem_alloc_f)(const size_t),
+		void *(*mem_realloc_f)(void *, const size_t),
 		void (*mem_free_f)(void *));
 
 struct chunk *chunk_new(size_t size);
@@ -84,6 +85,11 @@ void chunk_list_free_chunks(struct chunk_list *cm);
 
 
 int chunk_iov_init(struct chunk_iov *iov, int size);
+
+/**
+ * chunk_iov_resize - Changes size of iov.
+ */
+int chunk_iov_resize(struct chunk_iov *iov, int size);
 
 /**
  * chunk_iov_length - Returns total length of iov entries.
