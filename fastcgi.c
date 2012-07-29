@@ -849,6 +849,7 @@ int _mkp_event_write(int socket)
 	struct request *req = NULL;
 	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
 	struct fcgi_fd *fd;
+	struct fcgi_location *locp;
 
 	fd  = fcgi_fd_list_get_by_fd(fdl, socket);
 	req = fd ? NULL : request_list_get_by_fd(rl, socket);
@@ -887,6 +888,13 @@ int _mkp_event_write(int socket)
 				"[FD %d] Failed to set fd state.", fd->fd);
 		}
 		else {
+			locp = fcgi_config_get_location(&fcgi_global_config,
+					fd->location_id);
+			check(locp,
+				"[FCGI_FD %d] Failed to get location.", fd->fd);
+			check_debug(locp->keep_alive,
+				"[FCGI_FD %d] Closing new connection, no work.", fd->fd);
+
 			PLUGIN_TRACE("[FCGI_FD %d] Putting fcgi_fd to sleep.",
 					fd->fd);
 
