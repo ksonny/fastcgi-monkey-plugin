@@ -378,10 +378,11 @@ error:
 
 int fcgi_send_abort_request(struct request *req, struct fcgi_fd *fd)
 {
+	struct request_list *rl = &fcgi_local_context->rl;
 	struct fcgi_header h = {
 		.version  = FCGI_VERSION_1,
 		.type     = FCGI_ABORT_REQUEST,
-		.req_id   = request_list_index_of(&tdata.rl, req),
+		.req_id   = request_list_index_of(rl, req),
 		.body_len = 0,
 		.body_pad = 0,
 	};
