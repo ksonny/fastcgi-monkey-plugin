@@ -598,8 +598,12 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 		}
 
 		while (read.len > 0) {
-			fcgi_read_header(read.data, &h);
-			pkg_size = sizeof(h) + h.body_len + h.body_pad;
+			if (read.len < sizeof(h)) {
+				pkg_size = sizeof(h);
+			} else {
+				fcgi_read_header(read.data, &h);
+				pkg_size = sizeof(h) + h.body_len + h.body_pad;
+			}
 
 			if (read.len < pkg_size) {
 				inherit = read.len;
