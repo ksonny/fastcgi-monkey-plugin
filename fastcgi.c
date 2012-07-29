@@ -329,7 +329,7 @@ int fcgi_prepare_request(struct request *req)
 	location = fcgi_config_get_location(&fcgi_global_config, req->clock_id);
 	check(location, "[REQ_ID %d] Failed to get location.", req_id);
 
-	p1 = mk_api->mem_alloc(len1 + len2 + len3 + len4 + len5);
+	p1 = mk_api->mem_alloc_z(len1 + len2 + len3 + len4 + len5);
 	check_mem(p1);
 	p2 = p1 + len1;
 	p3 = p2 + len2;
