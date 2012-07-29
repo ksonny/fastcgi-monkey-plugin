@@ -181,6 +181,9 @@ int fcgi_config_read_location(struct fcgi_location *loc,
 			MK_CONFIG_VAL_STR);
 
 	check(regex, "No match regex defined for this location.");
+	for (tok = regex; *tok != '\0'; tok++) {
+		*tok = (*tok == ' ') ? '|' : *tok;
+	}
 	ret = regcomp(&loc->match_regex, regex, REG_EXTENDED|REG_NOSUB);
 	check(!ret, "Regex failure on location.");
 	mk_api->mem_free(regex);
