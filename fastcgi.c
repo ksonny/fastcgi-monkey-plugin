@@ -807,6 +807,9 @@ static int hangup(int socket)
 	else if (fd) {
 		PLUGIN_TRACE("[FCGI_FD %d] Hangup event received.", fd->fd);
 
+		mk_api->event_del(fd->fd);
+		mk_api->socket_close(fd->fd);
+
 		state = fd->state;
 
 		fd->fd     = -1;
@@ -816,7 +819,7 @@ static int hangup(int socket)
 			fcgi_new_connection(fd->location_id);
 		}
 
-		return MK_PLUGIN_RET_EVENT_CONTINUE;
+		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
 	else if (req) {
 		req_id = request_list_index_of(rl, req);
