@@ -462,38 +462,43 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 {
 	struct fcgi_end_req_body b;
 
-	check(req, "Failed to get request %d.", h.req_id);
+	check(req, "[REQ_ID %d] Failed to fetch request.", h.req_id);
 
 	switch (h.type) {
 	case FCGI_STDERR:
-		PLUGIN_TRACE("[REQ_ID %d] Recevied stderr, len %d.",
-				h.req_id, h.body_len);
-		log_err("[REQ %d] %.*s", h.req_id, h.body_len, read.data + sizeof(h));
+		log_err("[REQ_ID %d] Recevied stderr, len %d.", h.req_id, h.body_len);
+		log_err("[REQ_ID %d] %.*s", h.req_id, h.body_len, read.data + sizeof(h));
 		break;
 
 	case FCGI_STDOUT:
-		PLUGIN_TRACE("[REQ_ID %d] Recevied stdout, len %d",
+		if (req->state == REQ_FAILED) {
+			PLUGIN_TRACE("[REQ_ID %d] Ignoring stdout to failed req, len %d",
 				h.req_id, h.body_len);
-		if (h.body_len == 0) {
+		}
+		else if (h.body_len == 0) {
+			PLUGIN_TRACE("[REQ_ID %d] Recevied stdout, end-of-stream.",
+				h.req_id);
 			check(!request_set_state(req, REQ_STREAM_CLOSED),
 				"Failed to set request state.");
-			break;
 		}
-		check(request_add_pkg(req, h, read) > 0,
-			"[REQ %d] Failed to add pkg.",
-			h.req_id);
+		else {
+			PLUGIN_TRACE("[REQ_ID %d] Recevied stdout, len %d",
+				h.req_id, h.body_len);
+			check(request_add_pkg(req, h, read) > 0,
+				"[REQ_ID %d] Failed to add stdout package.",
+				h.req_id);
+		}
 		break;
 
 	case FCGI_END_REQUEST:
-		PLUGIN_TRACE("[REQ_ID %d] Recevied end request, len %d.",
-				h.req_id, h.body_len);
+		PLUGIN_TRACE("[REQ_ID %d] Recevied end request.", h.req_id);
 		fcgi_read_end_req_body(read.data + sizeof(h), &b);
 
 		switch (b.app_status) {
 		case EXIT_SUCCESS:
 			break;
 		case EXIT_FAILURE:
-			log_warn("[REQ %d] Application exit failure.",
+			log_warn("[REQ_ID %d] Application exit failure.",
 				h.req_id);
 			break;
 		}
@@ -505,7 +510,7 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 		case FCGI_OVERLOADED:
 		case FCGI_UNKNOWN_ROLE:
 		default:
-			log_warn("[REQ %d] Protocol status: %s",
+			log_warn("[REQ_ID %d] Protocol status: %s",
 				h.req_id,
 				FCGI_PROTOCOL_STATUS_STR(b.protocol_status));
 		}
@@ -513,24 +518,28 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 		request_set_fcgi_fd(req, -1);
 
 		check(!fcgi_fd_set_state(fd, FCGI_FD_READY),
-			"Failed to set fd state.");
+			"[FCGI_FD %d] Failed to set FCGI_FD_READY state.",
+			fd->fd);
 
-		if (req->state == REQ_FAILED && req->fd == -1) {
+		if (req->fd == -1) {
 			request_recycle(req);
 		}
-
-		PLUGIN_TRACE("[REQ_ID %d] Ending request.", h.req_id);
-		check(!request_set_state(req, REQ_ENDED),
-			"Failed to set request state.");
-		mk_api->event_socket_change_mode(req->fd,
-			MK_EPOLL_WRITE,
-			MK_EPOLL_LEVEL_TRIGGERED);
+		else if (req->state != REQ_FAILED) {
+			PLUGIN_TRACE("[REQ_ID %d] Ending request.",
+				h.req_id);
+			check(!request_set_state(req, REQ_ENDED),
+				"[REQ_ID %d] Failed to set request state.",
+				h.req_id);
+			mk_api->event_socket_change_mode(req->fd,
+				MK_EPOLL_WAKEUP,
+				MK_EPOLL_LEVEL_TRIGGERED);
+		}
 		break;
 	case 0:
-		sentinel("[REQ %d] Received NULL package.", h.req_id);
+		sentinel("[REQ_ID %d] Received NULL package.", h.req_id);
 		break;
 	default:
-		log_info("[REQ %d] Ignore package: %s",
+		log_info("[REQ_ID %d] Ignore package type: %s",
 			h.req_id,
 			FCGI_MSG_TYPE_STR(h.type));
 	}
@@ -907,20 +916,6 @@ int _mkp_event_write(int socket)
 				MK_EPOLL_EDGE_TRIGGERED);
 			check(!fcgi_fd_set_state(fd, FCGI_FD_SLEEPING),
 				"Failed to set fd state.");
-		}
-		return MK_PLUGIN_RET_EVENT_OWNED;
-	}
-	else if (fd && fd->state == FCGI_FD_RECEIVING) {
-
-		req = request_list_get_by_fcgi_fd(rl, fd->fd);
-
-		if (req && req->state == REQ_FAILED) {
-			log_info("[FD %d] We have failed request!", req->fd);
-
-			chunk_iov_reset(&req->iov);
-
-			check(!fcgi_send_abort_request(req, fd),
-				"[FD %d] Failed to send abort request.", fd->fd);
 		}
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
