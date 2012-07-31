@@ -944,7 +944,7 @@ int _mkp_event_read(int socket)
 	if (!fd) {
 		return MK_PLUGIN_RET_EVENT_NEXT;
 	}
-	else if (fd->state == FCGI_FD_RECEIVING) {
+	else {
 		PLUGIN_TRACE("[FCGI_FD %d] Receiving data.", fd->fd);
 
 		check(!fcgi_recv_response(fd, cl, rl, fcgi_handle_pkg),
@@ -956,10 +956,8 @@ int _mkp_event_read(int socket)
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
-	else {
-		return MK_PLUGIN_RET_EVENT_CONTINUE;
-	}
 error:
+	PLUGIN_TRACE("[FCGI_FD %d] Closing connection.", fd->fd);
 	return MK_PLUGIN_RET_EVENT_CLOSE;
 }
 
