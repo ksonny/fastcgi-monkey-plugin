@@ -824,20 +824,21 @@ static int hangup(int socket)
 	else if (req) {
 		req_id = request_list_index_of(rl, req);
 
-		if (req->fcgi_fd == -1) {
-			PLUGIN_TRACE("[REQ_ID %d] Hangup event.", req_id);
-			request_recycle(req);
+		log_warn("[REQ_ID %d] Hangup event.", req_id);
+
+		if (req->state != REQ_FAILED) {
+			request_set_state(req, REQ_FAILED);
 		}
-		else {
-			log_warn("[REQ_ID %d] Hangup event, request still running.",
-				req_id);
-			if (req->state != REQ_FAILED) {
-				request_set_state(req, REQ_FAILED);
-			}
+
+		if (req->fcgi_fd == -1) {
+			PLUGIN_TRACE("[REQ_ID %d] Recycle failed request.", req_id);
+			request_recycle(req);
+		} else {
 			req->fd = -1;
 			req->cs = NULL;
 			req->sr = NULL;
 		}
+
 		return MK_PLUGIN_RET_EVENT_CONTINUE;
 	}
 	else {
