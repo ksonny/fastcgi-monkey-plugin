@@ -36,6 +36,21 @@ struct request {
 	struct chunk_iov iov;
 };
 
+struct req_cache_entry {
+	struct request *req;
+	int fd;
+	int fcgi_fd;
+	int counter;
+};
+
+#define REQ_CACHE_SIZE 32
+
+struct request_cache {
+	struct req_cache_entry entries[REQ_CACHE_SIZE];
+	uint16_t clock_hand;
+	uint16_t mask;
+};
+
 /** struct request_list - tracks list of requests
  * @n: Number of entries in list.
  * @id_offset: Substracted from req_id to get index in list.
@@ -46,6 +61,7 @@ struct request {
  * maximum number of entries possible to send in a fastcgi header.
  */
 struct request_list {
+	struct request_cache cache;
 	uint16_t size;
 	uint16_t id_offset;
 	uint16_t clock_count;

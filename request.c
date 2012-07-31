@@ -174,6 +174,114 @@ void request_free(struct request *req)
 	chunk_iov_free(&req->iov);
 }
 
+void request_cache_init(struct request_cache *cache)
+{
+	uint16_t i;
+
+	for (i = 0; i < REQ_CACHE_SIZE; i++) {
+		cache->entries[i].req = NULL;
+		cache->entries[i].fd = -1;
+		cache->entries[i].counter = 0;
+	}
+
+	cache->clock_hand = 0;
+	cache->mask = REQ_CACHE_SIZE - 1;
+}
+
+void request_cache_add(struct request_cache *cache, struct request *req)
+{
+	uint16_t i, mask = cache->mask, clock = cache->clock_hand;
+	struct req_cache_entry *e;
+
+	i = clock;
+	do {
+		i = (i + 1) & mask;
+		e = cache->entries + 1;
+
+		if (e->counter > 0) {
+			e->counter--;
+		} else {
+			e->req = req;
+			e->fd = req->fd;
+			e->fcgi_fd = req->fcgi_fd;
+			e->counter = 1;
+			cache->clock_hand = i;
+			return;
+		}
+	} while (i != clock);
+}
+
+void request_cache_hit(struct request_cache *cache, struct request *req)
+{
+	uint16_t i, mask = cache->mask, clock = cache->clock_hand;
+	struct req_cache_entry *e;
+
+	i = clock;
+	do {
+		i = (i + 1) & mask;
+		e = cache->entries + i;
+
+		if (e->req == req) {
+			e->fd = req->fd;
+			e->fcgi_fd = req->fcgi_fd;
+			e->counter += 1;
+			return;
+		}
+	} while (i != clock);
+
+	request_cache_add(cache, req);
+}
+
+struct request *request_cache_search_fcgi_fd(struct request_cache *cache, int fd)
+{
+	uint16_t i, mask = cache->mask, clock = cache->clock_hand;
+	struct req_cache_entry *e;
+
+	i = clock;
+	do {
+		i = (i + 1) & mask;
+		e = cache->entries + i;
+
+		if (e->fcgi_fd == fd) {
+			if (e->req->fcgi_fd == fd) {
+				e->counter += 1;
+				return e->req;
+			} else {
+				e->counter = 0;
+				e->fcgi_fd = -1;
+				return NULL;
+			}
+		}
+	} while (i != clock);
+
+	return NULL;
+}
+
+struct request *request_cache_search(struct request_cache *cache, int fd)
+{
+	uint16_t i, mask = cache->mask, clock = cache->clock_hand;
+	struct req_cache_entry *e;
+
+	i = clock;
+	do {
+		i = (i + 1) & mask;
+		e = cache->entries + i;
+
+		if (e->fd == fd) {
+			if (e->req->fd == fd) {
+				e->counter += 1;
+				return e->req;
+			} else {
+				e->counter = 0;
+				e->fd = -1;
+				return NULL;
+			}
+		}
+	} while (i != clock);
+
+	return NULL;
+}
+
 int request_list_init(struct request_list *rl,
 		uint16_t clock_count,
 		uint16_t id_offset,
@@ -184,6 +292,8 @@ int request_list_init(struct request_list *rl,
 	uint16_t i;
 
 	check(is_power_of_2(size), "Size must be power of 2, it is %d", size);
+
+	request_cache_init(&rl->cache);
 
 	clock_hands = mem_alloc(clock_count * sizeof(*clock_hands));
 	check_mem(clock_hands);
@@ -268,6 +378,7 @@ struct request *request_list_next_assigned(struct request_list *rl,
 		i = (i + 1) & mask;
 		r = rl->rs + i;
 		if (r->state == REQ_ASSIGNED && r->clock_id == clock_id) {
+			request_cache_hit(&rl->cache, r);
 			set_clock_hand(rl, clock_id, i);
 			return r;
 		}
@@ -281,11 +392,17 @@ struct request *request_list_get_by_fd(struct request_list *rl, int fd)
 	uint16_t i, mask = rl->size -1, clock = get_clock_hand(rl, 0);
 	struct request *r;
 
+	r = request_cache_search(&rl->cache, fd);
+	if (r != NULL) {
+		return r;
+	}
+
 	i = clock;
 	do {
 		i = (i + 1) & mask;
 		r = rl->rs + i;
 		if (r->fd == fd) {
+			request_cache_add(&rl->cache, r);
 			return r;
 		}
 	} while (i != clock);
@@ -298,10 +415,16 @@ struct request *request_list_get_by_fcgi_fd(struct request_list *rl, int fd)
 	uint16_t i, mask = rl->size -1, clock = get_clock_hand(rl, 0);
 	struct request *r;
 
+	r = request_cache_search_fcgi_fd(&rl->cache, fd);
+	if (r != NULL) {
+		return r;
+	}
+
 	i = clock;
 	do {
 		r = rl->rs + i;
 		if (r->fcgi_fd == fd) {
+			request_cache_add(&rl->cache, r);
 			return r;
 		}
 		i = (i + 1) & mask;
@@ -317,6 +440,8 @@ struct request *request_list_get(struct request_list *rl, uint16_t req_id)
 		"Request id out of range.");
 	check(real_req_index < rl->size,
 		"Request id out of range.");
+
+	request_cache_hit(&rl->cache, rl->rs + real_req_index);
 
 	return rl->rs + real_req_index;
 error:
