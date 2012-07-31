@@ -19,6 +19,7 @@ void fcgi_fd_init(struct fcgi_fd *fd, int server_id, int location_id)
 	fd->fd = -1;
 	fd->server_id = server_id;
 	fd->location_id = location_id;
+	fd->chunk = NULL;
 }
 
 int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state)
@@ -56,6 +57,57 @@ int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state)
 	return 0;
 error:
 	return -1;
+}
+
+/*
+ * Copy inherit bytes from old chunk to new chunk and set as current
+ * chunk.
+ */
+int fcgi_fd_set_chunk(struct fcgi_fd *fd, struct chunk *a, size_t inherit)
+{
+	struct chunk *b = fd->chunk;
+	size_t b_pos, a_pos;
+	struct chunk_ptr tmp;
+
+	chunk_retain(a);
+
+	if (b && inherit > 0) {
+		check(b->write >= inherit,
+			"Not enough used on old chunk to inherit.");
+		check(a->size - a->write > inherit,
+			"Not enough free space on new chunk to inherit.");
+
+		a_pos = a->write;
+		b_pos = b->write - inherit;
+
+		memcpy(a->data + a_pos, b->data + b_pos, inherit);
+
+		a_pos     += inherit;
+		tmp.parent = a;
+		tmp.len    = a->size - a_pos;
+		tmp.data   = a->data + a_pos;
+
+		check(!chunk_set_write_ptr(a, tmp),
+			"Failed to set new write pointer.");
+		chunk_release(b);
+	} else if (b) {
+		chunk_release(b);
+	} else {
+		check(inherit == 0, "There are no chunks to inherit from.");
+	}
+
+	fd->chunk = a;
+	return 0;
+error:
+	if (mk_list_is_empty(&a->_head)) {
+		mk_list_del(&a->_head);
+	}
+	return -1;
+}
+
+struct chunk *fcgi_fd_get_chunk(struct fcgi_fd *fd)
+{
+	return fd->chunk;
 }
 
 int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config)

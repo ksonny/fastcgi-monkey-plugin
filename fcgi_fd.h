@@ -1,6 +1,7 @@
 #ifndef __FCGI_FD__
 #define __FCGI_FD__
 
+#include "chunk.h"
 #include "fcgi_config.h"
 
 enum fcgi_fd_state {
@@ -16,6 +17,7 @@ struct fcgi_fd {
 	int fd;
 	int server_id;
 	int location_id;
+	struct chunk *chunk;
 };
 
 struct fcgi_fd_list {
@@ -29,6 +31,10 @@ void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 void fcgi_fd_init(struct fcgi_fd *fd, int server_id, int location_id);
 
 int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state);
+
+int fcgi_fd_set_chunk(struct fcgi_fd *fd, struct chunk *a, size_t inherit);
+
+struct chunk *fcgi_fd_get_chunk(struct fcgi_fd *fd);
 
 int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config);
 

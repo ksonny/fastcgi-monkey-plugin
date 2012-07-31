@@ -119,51 +119,9 @@ error:
 	return NULL;
 }
 
-/*
- * Adds chunk c to chunk manager and mark as current chunk.
- * If inherit > 0 then copy the last inherit bytes commited to old
- * current.
- */
-int chunk_list_add(struct chunk_list *cm, struct chunk *a, size_t inherit)
+void chunk_list_add(struct chunk_list *cm, struct chunk *a)
 {
-	struct chunk *b = chunk_list_current(cm);
-	size_t b_pos, a_pos;
-	struct chunk_ptr tmp;
-
-	chunk_retain(a);
-
-	if (b && inherit > 0) {
-		check(b->write >= inherit,
-			"Not enough used on old chunk to inherit.");
-		check(a->size - a->write > inherit,
-			"Not enough free space on new chunk to inherit.");
-
-		a_pos = a->write;
-		b_pos = b->write - inherit;
-
-		memcpy(a->data + a_pos, b->data + b_pos, inherit);
-
-		a_pos     += inherit;
-		tmp.parent = a;
-		tmp.len    = a->size - a_pos;
-		tmp.data   = a->data + a_pos;
-
-		check(!chunk_set_write_ptr(a, tmp),
-			"Failed to set new write pointer.");
-		chunk_release(b);
-	} else if (b) {
-		chunk_release(b);
-	} else {
-		check(inherit == 0, "There are no chunks to inherit from.");
-	}
-
 	mk_list_add(&a->_head, &cm->chunks._head);
-	return 0;
-error:
-	if (mk_list_is_empty(&a->_head)) {
-		mk_list_del(&a->_head);
-	}
-	return -1;
 }
 
 void chunk_list_stats(struct chunk_list *cm)

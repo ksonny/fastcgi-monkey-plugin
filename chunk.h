@@ -77,7 +77,7 @@ void chunk_list_init(struct chunk_list *cm);
 
 struct chunk *chunk_list_current(struct chunk_list *cm);
 
-int chunk_list_add(struct chunk_list *cm, struct chunk *a, size_t inherit);
+void chunk_list_add(struct chunk_list *cm, struct chunk *a);
 
 void chunk_list_stats(struct chunk_list *cm);
 

@@ -568,7 +568,7 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 
 	PLUGIN_TRACE("[FCGI_FD %d] Receiving response.", fd->fd);
 
-	c = chunk_list_current(cl);
+	c = fcgi_fd_get_chunk(fd);
 	if (c != NULL) {
 		write = chunk_write_ptr(c);
 		read  = chunk_read_ptr(c);
@@ -576,12 +576,14 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 
 	do {
 		if (inherit > 0 || write.len < sizeof(h)) {
-			PLUGIN_TRACE("New chunk, inherit %ld.", inherit);
+			PLUGIN_TRACE("[FCGI_FD] New chunk, inherit %ld.",
+				inherit);
 			c = chunk_new(65536);
 			check_mem(c);
-			check(!chunk_list_add(cl, c, inherit),
-				"Failed to add chunk.");
-			write   = chunk_write_ptr(c);
+			chunk_list_add(cl, c);
+			check(!fcgi_fd_set_chunk(fd, c, inherit),
+				"[FCGI_FD %d] Failed to add chunk.", fd->fd);
+			write = chunk_write_ptr(c);
 			inherit = 0;
 		}
 
