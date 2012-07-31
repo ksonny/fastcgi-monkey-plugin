@@ -398,8 +398,12 @@ error:
 
 int fcgi_send_request(struct request *req, struct fcgi_fd *fd)
 {
-	check(chunk_iov_sendv(fd->fd, &req->iov) > 0,
-		"Socket error occured.");
+	ssize_t iov_len = chunk_iov_length(&req->iov);
+	ssize_t ret;
+
+	ret = chunk_iov_sendv(fd->fd, &req->iov);
+	check(ret == iov_len,
+		"Socket error occured, ret = %ld.", ret);
 	check(!request_set_state(req, REQ_SENT),
 		"Failed to set req state.");
 
