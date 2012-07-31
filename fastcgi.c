@@ -557,7 +557,7 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 			struct fcgi_header h,
 			struct chunk_ptr read))
 {
-	size_t pkg_size, inherit = 0;
+	size_t pkg_size = 0, inherit = 0;
 	ssize_t ret = 0;
 	int done = 0;
 
@@ -578,7 +578,11 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 		if (inherit > 0 || write.len < sizeof(h)) {
 			PLUGIN_TRACE("[FCGI_FD] New chunk, inherit %ld.",
 				inherit);
-			c = chunk_new(65536);
+			if (pkg_size > CHUNK_SIZE(8192)) {
+				c = chunk_new(SIZE_CHUNK(pkg_size));
+			} else {
+				c = chunk_new(8192);
+			}
 			check_mem(c);
 			chunk_list_add(cl, c);
 			check(!fcgi_fd_set_chunk(fd, c, inherit),

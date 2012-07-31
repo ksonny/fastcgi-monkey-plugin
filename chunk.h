@@ -51,6 +51,7 @@ struct chunk_iov {
 };
 
 #define CHUNK_SIZE(SIZE) (SIZE) - offsetof(struct chunk, data)
+#define SIZE_CHUNK(SIZE) (SIZE) + offsetof(struct chunk, data)
 
 void chunk_module_init(void *(*mem_alloc_f)(const size_t),
 		void *(*mem_realloc_f)(void *, const size_t),
