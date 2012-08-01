@@ -266,6 +266,9 @@ int fcgi_server_connect(const struct fcgi_server *server)
 
 	return sock_fd;
 error:
+	if (sock_fd != -1) {
+		mk_api->socket_close(sock_fd);
+	}
 	return -1;
 }
 
