@@ -572,7 +572,8 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 	struct fcgi_header h;
 	struct request *req;
 	struct chunk *c;
-	struct chunk_ptr write = {0}, read = {0};
+	struct chunk_ptr write = { .len = 0, .data = NULL, .parent = NULL};
+	struct chunk_ptr read = { .len = 0, .data = NULL, .parent = NULL};
 
 	PLUGIN_TRACE("[FCGI_FD %d] Receiving response.", fd->fd);
 
