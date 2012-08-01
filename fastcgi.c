@@ -286,7 +286,7 @@ int fcgi_new_connection(int location_id)
 	check(server, "Server for this fcgi_fd does not exist.");
 
 	fd->fd = fcgi_server_connect(server);
-	check(fd->fd != -1, "Failed to connect to server.");
+	check_debug(fd->fd != -1, "Failed to connect to server.");
 
 	mk_api->socket_set_nonblocking(fd->fd);
 	mk_api->event_add(fd->fd,
@@ -634,8 +634,9 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 				ret     = inherit;
 			} else {
 				req = request_list_get(rl, h.req_id);
-				check(!handle_pkg(fd, req, h, read),
-					"Failed to handle pkg.");
+				check_debug(!handle_pkg(fd, req, h, read),
+					"[REQ_ID %d] Failed to handle pkg.",
+					h.req_id);
 				ret = pkg_size;
 			}
 
@@ -971,7 +972,7 @@ int _mkp_event_read(int socket)
 	else {
 		PLUGIN_TRACE("[FCGI_FD %d] Receiving data.", fd->fd);
 
-		check(!fcgi_recv_response(fd, cl, rl, fcgi_handle_pkg),
+		check_debug(!fcgi_recv_response(fd, cl, rl, fcgi_handle_pkg),
 			"[FCGI_FD %d] Failed to receive response.", fd->fd);
 		check_debug(fd->state != FCGI_FD_CLOSING,
 			"[FCGI_FD %d] Closing connection.", fd->fd);
