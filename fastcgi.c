@@ -734,14 +734,11 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 
 	return MK_PLUGIN_RET_CONTINUE;
 error:
-	PLUGIN_TRACE("[FD %d] Connection has failed.", cs->socket);
-	mk_api->header_set_http_status(sr, MK_SERVER_INTERNAL_ERROR);
-	sr->close_now = MK_TRUE;
 	if (req) {
 		PLUGIN_TRACE("[REQ_ID %d] Request failed in stage_30.", req_id);
 		request_set_state(req, REQ_FAILED);
 	}
-	return MK_PLUGIN_RET_CLOSE_CONX;
+	return MK_PLUGIN_RET_CONTINUE;
 }
 
 int _mkp_init(struct plugin_api **api, char *confdir)
@@ -873,7 +870,7 @@ static int hangup(int socket)
 
 int _mkp_event_write(int socket)
 {
-	uint16_t req_id;
+	uint16_t req_id = 0;
 	struct request_list *rl = &fcgi_local_context->rl;
 	struct request *req = NULL;
 	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
@@ -897,6 +894,20 @@ int _mkp_event_write(int socket)
 			"[REQ_ID %d] Request state transition failed.", req_id);
 
 		request_recycle(req);
+		mk_api->http_request_end(socket);
+
+		return MK_PLUGIN_RET_EVENT_OWNED;
+	}
+	else if (req && req->state == REQ_FAILED) {
+		req_id = request_list_index_of(rl, req);
+
+		PLUGIN_TRACE("[REQ_ID %d] Request failed.", req_id);
+		mk_api->http_request_error(MK_SERVER_INTERNAL_ERROR,
+				req->cs, req->sr);
+
+		if (req->fcgi_fd == -1) {
+			request_recycle(req);
+		}
 		mk_api->http_request_end(socket);
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
@@ -940,6 +951,7 @@ int _mkp_event_write(int socket)
 	}
 error:
 	if (req) {
+		PLUGIN_TRACE("[REQ_ID %d] Request failed in event_write.", req_id);
 		request_set_state(req, REQ_FAILED);
 	}
 	return MK_PLUGIN_RET_EVENT_CLOSE;
