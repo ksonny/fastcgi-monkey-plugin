@@ -653,6 +653,7 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 
 	return 0;
 error:
+	fcgi_fd_set_state(fd, FCGI_FD_CLOSING);
 	return -1;
 }
 
