@@ -546,6 +546,14 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 
 	return 0;
 error:
+	if (req && req->state != REQ_FAILED) {
+		if (req->state != REQ_ENDED) {
+			mk_api->event_socket_change_mode(req->fd,
+				MK_EPOLL_WAKEUP,
+				MK_EPOLL_LEVEL_TRIGGERED);
+		}
+		request_set_state(req, REQ_FAILED);
+	}
 	return -1;
 }
 
