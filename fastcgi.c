@@ -381,24 +381,6 @@ error:
 	return -1;
 }
 
-int fcgi_send_request(struct request *req, struct fcgi_fd *fd)
-{
-	ssize_t iov_len = chunk_iov_length(&req->iov);
-	ssize_t ret;
-
-	ret = chunk_iov_sendv(fd->fd, &req->iov);
-	check(ret == iov_len,
-		"Socket error occured, ret = %ld.", ret);
-	check(!request_set_state(req, REQ_SENT),
-		"Failed to set req state.");
-
-	chunk_iov_reset(&req->iov);
-	return 0;
-error:
-	chunk_iov_reset(&req->iov);
-	return -1;
-}
-
 int fcgi_send_abort_request(struct request *req, struct fcgi_fd *fd)
 {
 	struct request_list *rl = &fcgi_local_context->rl;
@@ -880,6 +862,7 @@ int _mkp_event_write(int socket)
 	struct fcgi_fd_list *fdl = &fcgi_local_context->fdl;
 	struct fcgi_fd *fd;
 	struct fcgi_location *locp;
+	ssize_t ret;
 
 	fd  = fcgi_fd_list_get_by_fd(fdl, socket);
 	req = fd ? NULL : request_list_get_by_fd(rl, socket);
@@ -923,15 +906,20 @@ int _mkp_event_write(int socket)
 			req_id = request_list_index_of(rl, req);
 			request_set_fcgi_fd(req, fd->fd);
 
-			PLUGIN_TRACE("[FCGI_FD %d] Sending request with id %d.",
-					fd->fd, req_id);
+			PLUGIN_TRACE("[REQ_ID %d] Assigned to FCGI_FD %d.",
+					req_id, fd->fd);
 
+			check(!request_set_state(req, REQ_SENT),
+				"[REQ_ID %d] Failed to set sent state.",
+				req_id);
+			check(!fcgi_fd_set_begin_req_iov(fd, &req->iov),
+				"[FCGI_FD %d] Failed to set begin_req_iov.",
+				fd->fd);
 			check(!fcgi_fd_set_state(fd, FCGI_FD_SENDING),
-				"[FD %d] Failed to set fd state.", fd->fd);
-			check(!fcgi_send_request(req, fd),
-				"[REQ_ID %d] Failed to send request.", req_id);
-			check(!fcgi_fd_set_state(fd, FCGI_FD_RECEIVING),
-				"[FD %d] Failed to set fd state.", fd->fd);
+				"[FCGI_FD %d] Failed to set sending state.",
+				fd->fd);
+
+			return _mkp_event_write(fd->fd);
 		}
 		else {
 			locp = fcgi_config_get_location(&fcgi_global_config,
@@ -949,7 +937,36 @@ int _mkp_event_write(int socket)
 				MK_EPOLL_EDGE_TRIGGERED);
 			check(!fcgi_fd_set_state(fd, FCGI_FD_SLEEPING),
 				"Failed to set fd state.");
+
+			return MK_PLUGIN_RET_EVENT_OWNED;
 		}
+	}
+	else if (fd && fd->state == FCGI_FD_SENDING) {
+
+		PLUGIN_TRACE("[FCGI_FD %d] Sending request.", fd->fd);
+
+		check(fd->begin_req,
+			"[FCGI_FD %d] No begin_req attached.", fd->fd);
+
+		ret = chunk_iov_sendv(fd->fd, fd->begin_req);
+		if (ret == -1) {
+			check(errno == EAGAIN, "Socket write error.");
+
+			PLUGIN_TRACE("[FCGI_FD %d] EAGAIN on write.", fd->fd);
+
+			return MK_PLUGIN_RET_EVENT_OWNED;
+		}
+
+		fd->begin_req_remain -= ret;
+
+		if (fd->begin_req_remain == 0) {
+			fcgi_fd_set_state(fd, FCGI_FD_RECEIVING);
+			chunk_iov_reset(fd->begin_req);
+			fd->begin_req = NULL;
+		} else {
+			chunk_iov_drop(fd->begin_req, ret);
+		}
+
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
 	else {
