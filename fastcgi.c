@@ -34,48 +34,46 @@ static __thread struct fcgi_context *fcgi_local_context;
 		pos += fcgi_param_write(env + pos, key, value); \
 	} while (0)
 
-mk_pointer fcgi_create_env(struct client_session *cs,
+size_t fcgi_create_env(uint8_t *ptr,
+		const size_t len,
+		struct client_session *cs,
 		struct session_request *sr)
 {
 	mk_pointer key, value;
 	char buffer[128];
 	char *tmpuri = NULL;
-	size_t pos = 0, len = 4096;
-	uint8_t *env;
+	size_t pos = 0;
 	struct sockaddr_in addr;
 	socklen_t addr_len;
 
-	env = mk_api->mem_alloc(len);
-	check_mem(env);
-
 	mk_api->pointer_set(&key,   "PATH_INFO");
 	mk_api->pointer_set(&value, "");
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "GATEWAY_INTERFACE");
 	mk_api->pointer_set(&value, "CGI/1.1");
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "REDIRECT_STATUS");
 	mk_api->pointer_set(&value, "200");
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "SERVER_SOFTWARE");
 	mk_api->pointer_set(&value, sr->host_conf->host_signature);
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "DOCUMENT_ROOT");
 	value = sr->host_conf->documentroot;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "SERVER_PROTOCOL");
 	value = sr->protocol_p;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "SERVER_NAME");
 	value.data = sr->host_alias->name;
 	value.len  = sr->host_alias->len;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	addr_len = sizeof(addr);
 	if (!getsockname(cs->socket, (struct sockaddr *)&addr, &addr_len)) {
@@ -85,12 +83,12 @@ mk_pointer fcgi_create_env(struct client_session *cs,
 		}
 		mk_api->pointer_set(&key,   "SERVER_ADDR");
 		mk_api->pointer_set(&value, buffer);
-		__write_param(env, len, pos, key, value);
+		__write_param(ptr, len, pos, key, value);
 
 		snprintf(buffer, 128, "%d", ntohs(addr.sin_port));
 		mk_api->pointer_set(&key,   "SERVER_PORT");
 		mk_api->pointer_set(&value, buffer);
-		__write_param(env, len, pos, key, value);
+		__write_param(ptr, len, pos, key, value);
 	} else {
 		log_warn("%s", clean_errno());
 		errno = 0;
@@ -98,31 +96,31 @@ mk_pointer fcgi_create_env(struct client_session *cs,
 
 	mk_api->pointer_set(&key,   "SCRIPT_FILENAME");
 	value = sr->real_path;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "SCRIPT_NAME");
 	value = sr->uri_processed;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "REQUEST_METHOD");
 	value = sr->method_p;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "HTTP_HOST");
 	value = sr->host;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	addr_len = sizeof(addr);
 	if (!getpeername(cs->socket, (struct sockaddr *)&addr, &addr_len)) {
 		inet_ntop(AF_INET, &addr.sin_addr, buffer, 128);
 		mk_api->pointer_set(&key,   "REMOTE_ADDR");
 		mk_api->pointer_set(&value, buffer);
-		__write_param(env, len, pos, key, value);
+		__write_param(ptr, len, pos, key, value);
 
 		snprintf(buffer, 128, "%d", ntohs(addr.sin_port));
 		mk_api->pointer_set(&key,   "REMOTE_PORT");
 		mk_api->pointer_set(&value, buffer);
-		__write_param(env, len, pos, key, value);
+		__write_param(ptr, len, pos, key, value);
 	} else {
 		log_warn("%s", clean_errno());
 		errno = 0;
@@ -140,35 +138,34 @@ mk_pointer fcgi_create_env(struct client_session *cs,
 	} else {
 		value = sr->uri;
 	}
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "QUERY_STRING");
 	value = sr->query_string;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "CONTENT_TYPE");
 	value = sr->content_type;
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "CONTENT_LENGTH");
 	snprintf(buffer, 128, "%d", sr->content_length);
 	mk_api->pointer_set(&value, buffer);
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "HTTP_COOKIE");
 	value = mk_api->header_get(&sr->headers_toc, "Cookie:", 7);
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	mk_api->pointer_set(&key,   "HTTP_USER_AGENT");
 	value = mk_api->header_get(&sr->headers_toc, "User-Agent:", 11);
-	__write_param(env, len, pos, key, value);
+	__write_param(ptr, len, pos, key, value);
 
 	if (tmpuri) mk_api->mem_free(tmpuri);
-	return (mk_pointer){ .len = pos, .data = (char *)env };
+	return pos;
 error:
 	if (tmpuri) mk_api->mem_free(tmpuri);
-	if (env) mk_api->mem_free(env);
-	return (mk_pointer){ .len = 0, .data = NULL };
+	return pos;
 }
 
 #undef __write_param
@@ -283,6 +280,9 @@ error:
 
 int fcgi_prepare_request(struct request *req)
 {
+	struct request_list *rl = &fcgi_local_context->rl;
+	uint16_t req_id = 0;
+
 	struct fcgi_begin_req_body b = {
 		.role  = FCGI_RESPONDER,
 	};
@@ -290,18 +290,13 @@ int fcgi_prepare_request(struct request *req)
 		.version  = FCGI_VERSION_1,
 		.body_pad = 0,
 	};
-	size_t len1 = sizeof(h) + sizeof(b),
-	       len2 = sizeof(h),
-	       len3 = sizeof(h),
-	       len4 = sizeof(h),
-	       len5 = sizeof(h);
-	uint8_t *p1 = NULL, *p2 = NULL, *p3 = NULL, *p4 = NULL, *p5 = NULL;
-
 	struct fcgi_location *location;
 
-	struct request_list *rl = &fcgi_local_context->rl;
-	uint16_t req_id = 0;
-	mk_pointer env = fcgi_create_env(req->cs, req->sr);
+	size_t len = 4096, pos = 0, tmp, ret;
+	uint8_t *buffer;
+
+	buffer = mk_api->mem_alloc(len);
+	check_mem(buffer);
 
 	req_id = request_list_index_of(rl, req);
 	check(req_id > 0, "[REQ_ID %d] Bad request id.", req_id);
@@ -309,63 +304,76 @@ int fcgi_prepare_request(struct request *req)
 	location = fcgi_config_get_location(&fcgi_global_config, req->clock_id);
 	check(location, "[REQ_ID %d] Failed to get location.", req_id);
 
-	p1 = mk_api->mem_alloc_z(len1 + len2 + len3 + len4 + len5);
-	check_mem(p1);
-	p2 = p1 + len1;
-	p3 = p2 + len2;
-	p4 = p3 + len3;
-	p5 = p4 + len4;
-
 	// Write begin request.
 	h.type     = FCGI_BEGIN_REQUEST;
 	h.req_id   = req_id;
 	h.body_len = sizeof(b);
-	fcgi_write_header(p1, &h);
+	check(len - pos > sizeof(h), "Not enough space left.");
+	ret = fcgi_write_header(buffer + pos, &h);
+	pos += ret;
+
 	b.flags = location->keep_alive ? FCGI_KEEP_CONN : 0;
-	fcgi_write_begin_req_body(p1 + sizeof(h), &b);
+	check(len - pos > sizeof(h), "Not enough space left.");
+	ret = fcgi_write_begin_req_body(buffer + pos, &b);
+	pos += ret;
 
-	// Write parameter.
+	tmp = pos;
+	pos += sizeof(h);
+
+	ret = fcgi_create_env(buffer + pos, len - pos, req->cs, req->sr);
+	check(ret != -1, "Failed to write env.");
+
 	h.type = FCGI_PARAMS;
-	h.body_len = env.len;
-	fcgi_write_header(p2, &h);
+	h.body_len = ret;
+	h.body_pad = ~(ret - 1) & 7;
+	fcgi_write_header(buffer + tmp, &h);
 
-	// Write parameter end.
+	pos += h.body_len + h.body_pad;
+
 	h.type = FCGI_PARAMS;
 	h.body_len = 0;
-	fcgi_write_header(p3, &h);
+	h.body_pad = 0;
+	check(len - pos > sizeof(h), "Not enough space left.");
+	ret = fcgi_write_header(buffer + pos, &h);
+	pos += ret;
 
-	// Write stdin.
 	h.type = FCGI_STDIN;
 	if (req->sr->data.len > 0) {
+		h.type = FCGI_STDIN;
 		h.body_len = req->sr->data.len;
-		fcgi_write_header(p4, &h);
+		h.body_pad = ~(req->sr->data.len - 1) & 7;
+		check(len - pos > sizeof(h), "Not enough space left.");
+		fcgi_write_header(buffer + pos, &h);
+		pos += ret;
+
+		check(!chunk_iov_add_ptr(&req->iov, buffer, pos, 1),
+			"Adding data to iov failed.");
+
+		check(!chunk_iov_add_ptr(&req->iov,
+					req->sr->data.data,
+					req->sr->data.len, 0),
+			"Adding data to iov failed.");
+
+		tmp = pos;
+		pos += h.body_len + h.body_pad;
 
 		h.body_len = 0;
-		fcgi_write_header(p5, &h);
+		h.body_pad = 0;
+		check(len - pos > sizeof(h), "Not enough space left.");
+		ret = fcgi_write_header(buffer + pos, &h);
+		pos += ret;
+
+		check(!chunk_iov_add_ptr(&req->iov, buffer + tmp, pos, 0),
+			"Adding data to iov failed.");
 	}
 	else {
 		h.body_len = 0;
-		fcgi_write_header(p4, &h);
-	}
+		check(len - pos > sizeof(h), "Not enough space left.");
+		ret = fcgi_write_header(buffer + pos, &h);
+		pos += ret;
 
-	check(!chunk_iov_add_ptr(&req->iov, p1, len1, 1),
-			"Adding content to iov failed.");
-	check(!chunk_iov_add_ptr(&req->iov, p2, len2, 0),
-			"Adding content to iov failed.");
-	check(!chunk_iov_add_ptr(&req->iov, env.data, env.len, 1),
-			"Adding content to iov failed.");
-	check(!chunk_iov_add_ptr(&req->iov, p3, len3, 0),
-			"Adding content to iov failed.");
-	check(!chunk_iov_add_ptr(&req->iov, p4, len4, 0),
-			"Adding content to iov failed.");
-
-	if (req->sr->data.len > 0) {
-		check(!chunk_iov_add_ptr(&req->iov,
-				req->sr->data.data,
-				req->sr->data.len, 0),
-			"Adding content to iov failed.");
-		check(!chunk_iov_add_ptr(&req->iov, p5, len5, 0),
-			"Adding content to iov failed.");
+		check(!chunk_iov_add_ptr(&req->iov, buffer, pos, 1),
+			"Adding data to iov failed.");
 	}
 	return 0;
 error:
