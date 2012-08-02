@@ -930,6 +930,8 @@ int _mkp_event_write(int socket)
 			PLUGIN_TRACE("[FCGI_FD %d] Sending request with id %d.",
 					fd->fd, req_id);
 
+			check(!fcgi_fd_set_state(fd, FCGI_FD_SENDING),
+				"[FD %d] Failed to set fd state.", fd->fd);
 			check(!fcgi_send_request(req, fd),
 				"[REQ_ID %d] Failed to send request.", req_id);
 			check(!fcgi_fd_set_state(fd, FCGI_FD_RECEIVING),

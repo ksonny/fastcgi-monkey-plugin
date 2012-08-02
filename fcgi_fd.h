@@ -7,9 +7,10 @@
 enum fcgi_fd_state {
 	FCGI_FD_AVAILABLE = 1,
 	FCGI_FD_READY     = 2,
-	FCGI_FD_RECEIVING = 4,
-	FCGI_FD_CLOSING   = 8,
-	FCGI_FD_SLEEPING  = 16,
+	FCGI_FD_SENDING   = 4,
+	FCGI_FD_RECEIVING = 8,
+	FCGI_FD_CLOSING   = 16,
+	FCGI_FD_SLEEPING  = 32,
 };
 
 struct fcgi_fd {
