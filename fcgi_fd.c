@@ -19,6 +19,10 @@ void fcgi_fd_init(struct fcgi_fd *fd, int server_id, int location_id)
 	fd->fd = -1;
 	fd->server_id = server_id;
 	fd->location_id = location_id;
+
+	fd->begin_req_remain = 0;
+	fd->begin_req = NULL;
+
 	fd->chunk = NULL;
 }
 
@@ -65,6 +69,19 @@ int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state)
 		fd->state |= FCGI_FD_SLEEPING;
 		break;
 	}
+	return 0;
+error:
+	return -1;
+}
+
+int fcgi_fd_set_begin_req_iov(struct fcgi_fd *fd, struct chunk_iov *iov)
+{
+	check(fd->state == FCGI_FD_READY,
+		"[FCGI_FD %d] Please set begin_req_iov when ready.", fd->fd);
+
+	fd->begin_req_remain = chunk_iov_length(iov);
+	fd->begin_req = iov;
+
 	return 0;
 error:
 	return -1;

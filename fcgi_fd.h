@@ -18,6 +18,10 @@ struct fcgi_fd {
 	int fd;
 	int server_id;
 	int location_id;
+
+	size_t begin_req_remain;
+	struct chunk_iov *begin_req;
+
 	struct chunk *chunk;
 };
 
@@ -32,6 +36,8 @@ void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 void fcgi_fd_init(struct fcgi_fd *fd, int server_id, int location_id);
 
 int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state);
+
+int fcgi_fd_set_begin_req_iov(struct fcgi_fd *fd, struct chunk_iov *iov);
 
 int fcgi_fd_set_chunk(struct fcgi_fd *fd, struct chunk *a, size_t inherit);
 
