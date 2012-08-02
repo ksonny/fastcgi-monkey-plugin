@@ -103,6 +103,13 @@ size_t chunk_iov_length(struct chunk_iov *iov);
 ssize_t chunk_iov_sendv(int fd, struct chunk_iov *iov);
 
 /**
+ * chunk_iov_drop - Drops bytes from front of iovec.
+ *
+ * Useful with non-blocking IO and partial writes.
+ */
+int chunk_iov_drop(struct chunk_iov *iov, size_t bytes);
+
+/**
  * chunk_iov_add - Adds chunk entry to chunk_iov.
  *
  * Adds chunk data and creates chunk_ref entry in chunk_iov. Retains

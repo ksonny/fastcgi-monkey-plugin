@@ -249,6 +249,37 @@ error:
 	return 0;
 }
 
+/*
+ * Use char* p for pointer arithmetic as it's undefined for void*.
+ */
+int chunk_iov_drop(struct chunk_iov *iov, size_t bytes)
+{
+	struct iovec *io;
+	size_t length = chunk_iov_length(iov);
+	int i;
+	char *p;
+
+	check(bytes > 0, "Tried dropping 0 bytes.");
+	check(length >= bytes, "Tried dropping more bytes then available.");
+
+	for (i = 0; bytes != 0 && i < iov->size; i++) {
+		io = iov->io + i;
+
+		if (io->iov_len < bytes) {
+			io->iov_len = 0;
+			io->iov_base = NULL;
+		} else {
+			io->iov_len -= bytes;
+			p = io->iov_base;
+			p += bytes;
+			io->iov_base = p;
+		}
+	}
+	return 0;
+error:
+	return -1;
+}
+
 int chunk_iov_add(struct chunk_iov *iov, struct chunk_ptr cp)
 {
 	struct chunk_ref *cr;
