@@ -537,9 +537,12 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 			check(!request_set_state(req, REQ_ENDED),
 				"[REQ_ID %d] Failed to set request state.",
 				h.req_id);
-			mk_api->event_socket_change_mode(req->fd,
-				MK_EPOLL_WAKEUP,
-				MK_EPOLL_LEVEL_TRIGGERED);
+			if (request_get_flag(req, REQ_SLEEPING)) {
+				mk_api->event_socket_change_mode(req->fd,
+					MK_EPOLL_WAKEUP,
+					MK_EPOLL_LEVEL_TRIGGERED);
+				request_unset_flag(req, REQ_SLEEPING);
+			}
 		}
 		break;
 	case 0:
@@ -553,13 +556,14 @@ static int fcgi_handle_pkg(struct fcgi_fd *fd,
 
 	return 0;
 error:
-	if (req && req->state != REQ_FAILED) {
-		if (req->state != REQ_ENDED) {
+	if (req) {
+		request_set_state(req, REQ_FAILED);
+		if (request_get_flag(req, REQ_SLEEPING)) {
 			mk_api->event_socket_change_mode(req->fd,
 				MK_EPOLL_WAKEUP,
 				MK_EPOLL_LEVEL_TRIGGERED);
+			request_unset_flag(req, REQ_SLEEPING);
 		}
-		request_set_state(req, REQ_FAILED);
 	}
 	return -1;
 }
@@ -735,7 +739,8 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		PLUGIN_TRACE("[REQ_ID %d] Found connection available.", req_id);
 	}
 
-	mk_api->event_socket_change_mode(cs->socket,
+	request_set_flag(req, REQ_SLEEPING);
+	mk_api->event_socket_change_mode(req->fd,
 			MK_EPOLL_SLEEP,
 			MK_EPOLL_LEVEL_TRIGGERED);
 
@@ -745,6 +750,12 @@ error:
 	if (req) {
 		PLUGIN_TRACE("[REQ_ID %d] Request failed in stage_30.", req_id);
 		request_set_state(req, REQ_FAILED);
+		if (request_get_flag(req, REQ_SLEEPING)) {
+			mk_api->event_socket_change_mode(req->fd,
+					MK_EPOLL_WAKEUP,
+					MK_EPOLL_LEVEL_TRIGGERED);
+			request_unset_flag(req, REQ_SLEEPING);
+		}
 	}
 	return MK_PLUGIN_RET_CONTINUE;
 }
@@ -963,6 +974,12 @@ error:
 	if (req) {
 		PLUGIN_TRACE("[REQ_ID %d] Request failed in event_write.", req_id);
 		request_set_state(req, REQ_FAILED);
+		if (request_get_flag(req, REQ_SLEEPING)) {
+			mk_api->event_socket_change_mode(req->fd,
+					MK_EPOLL_WAKEUP,
+					MK_EPOLL_LEVEL_TRIGGERED);
+			request_unset_flag(req, REQ_SLEEPING);
+		}
 	}
 	return MK_PLUGIN_RET_EVENT_CLOSE;
 }
