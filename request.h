@@ -9,16 +9,15 @@
 enum request_state {
 	REQ_AVAILABLE     = 1,
 	REQ_ASSIGNED      = 2,
-	REQ_SENT          = 4,
-	REQ_STREAM_CLOSED = 8,
-	REQ_ENDED         = 16,
-	REQ_FINISHED      = 32,
-	REQ_FAILED        = 64,
+	REQ_SENT          = 3,
+	REQ_STREAM_CLOSED = 4,
+	REQ_ENDED         = 5,
+	REQ_FINISHED      = 6,
+	REQ_FAILED        = 7,
 };
 
 enum request_flags {
-	HEADERS_SENT = 1,
-	CHUNKED_CONX = 2,
+	REQ_SLEEPING = 1,
 };
 
 struct request {
@@ -79,6 +78,12 @@ void request_module_init(void *(*mem_alloc_p)(const size_t),
 int request_init(struct request *preq, int iov_n);
 
 int request_set_state(struct request *req, enum request_state state);
+
+int request_set_flag(struct request *req, enum request_flags flag);
+
+int request_unset_flag(struct request *req, enum request_flags flag);
+
+int request_get_flag(const struct request *req, enum request_flags flag);
 
 int request_assign(struct request *req,
 	int fd,

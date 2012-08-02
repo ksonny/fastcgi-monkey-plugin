@@ -113,6 +113,32 @@ error:
 	return -1;
 }
 
+int request_set_flag(struct request *req, enum request_flags flag)
+{
+	check(!(req->flags & flag), "Flag already set.");
+
+	req->flags |= flag;
+
+	return 0;
+error:
+	return -1;
+}
+
+int request_unset_flag(struct request *req, enum request_flags flag)
+{
+	check(req->flags & flag, "Flag not set.");
+
+	req->flags &= ~flag;
+
+	return 0;
+error:
+	return -1;
+}
+
+int request_get_flag(const struct request *req, enum request_flags flag)
+{
+	return !!(req->flags & flag);
+}
 
 int request_assign(struct request *req,
 	int fd,
