@@ -185,8 +185,12 @@ ssize_t request_add_pkg(struct request *req,
 	cp.data += sizeof(h);
 	cp.len = h.body_len;
 
-	check(!chunk_iov_add(&req->iov, cp),
-		"Adding content to iov failed.");
+	if (chunk_iov_add(&req->iov, cp)) {
+		check(!chunk_iov_resize(&req->iov, req->iov.size + 2),
+				"Failed to resize chunk.");
+		check(!chunk_iov_add(&req->iov, cp),
+				"Adding content to iov failed.");
+	}
 
 	return pkg_length;
 error:
@@ -332,7 +336,7 @@ int request_list_init(struct request_list *rl,
 	check_mem(tmp);
 
 	for (i = 0; i < size; i++) {
-		check(!request_init(tmp + i, 8),
+		check(!request_init(tmp + i, 4),
 			"Failed to init request %d", i);
 	}
 
