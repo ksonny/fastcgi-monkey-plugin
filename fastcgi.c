@@ -919,6 +919,10 @@ int _mkp_event_write(int socket)
 				"[FCGI_FD %d] Failed to set sending state.",
 				fd->fd);
 
+			if (fd->type == FCGI_FD_INET) {
+				mk_api->socket_cork_flag(fd->fd, TCP_CORK_ON);
+			}
+
 			return _mkp_event_write(fd->fd);
 		}
 		else {
@@ -960,6 +964,9 @@ int _mkp_event_write(int socket)
 		fd->begin_req_remain -= ret;
 
 		if (fd->begin_req_remain == 0) {
+			if (fd->type == FCGI_FD_INET) {
+				mk_api->socket_cork_flag(fd->fd, TCP_CORK_OFF);
+			}
 			fcgi_fd_set_state(fd, FCGI_FD_RECEIVING);
 			chunk_iov_reset(fd->begin_req);
 			fd->begin_req = NULL;
