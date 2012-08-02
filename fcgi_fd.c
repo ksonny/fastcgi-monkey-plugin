@@ -13,8 +13,12 @@ void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 	mem_free  = mem_free_p;
 }
 
-void fcgi_fd_init(struct fcgi_fd *fd, int server_id, int location_id)
+void fcgi_fd_init(struct fcgi_fd *fd,
+		enum fcgi_fd_type type,
+		int server_id,
+		int location_id)
 {
+	fd->type = type;
 	fd->state = FCGI_FD_AVAILABLE;
 	fd->fd = -1;
 	fd->server_id = server_id;
@@ -145,7 +149,9 @@ int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config)
 	int server_location_id[config->server_count];
 	ptrdiff_t srv_i;
 	struct fcgi_location *locp;
+	struct fcgi_server *srvp;
 	struct fcgi_fd *tmp = NULL;
+	enum fcgi_fd_type type;
 
 	for (i = 0; i < config->server_count; i++) {
 		server_location_id[i] = -1;
@@ -171,7 +177,14 @@ int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config)
 	check_mem(tmp);
 
 	for (i = 0; i < fd_count; i++) {
-		fcgi_fd_init(tmp + i, i, server_location_id[i]);
+		srvp = fcgi_config_get_server(config, i);
+		if (srvp->path) {
+			type = FCGI_FD_UNIX;
+		} else {
+			type = FCGI_FD_INET;
+		}
+
+		fcgi_fd_init(tmp + i, type, i, server_location_id[i]);
 	}
 
 	fdl->n   = fd_count;

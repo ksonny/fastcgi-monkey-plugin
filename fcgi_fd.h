@@ -4,6 +4,11 @@
 #include "chunk.h"
 #include "fcgi_config.h"
 
+enum fcgi_fd_type {
+	FCGI_FD_UNIX,
+	FCGI_FD_INET,
+};
+
 enum fcgi_fd_state {
 	FCGI_FD_AVAILABLE = 1,
 	FCGI_FD_READY     = 2,
@@ -14,6 +19,7 @@ enum fcgi_fd_state {
 };
 
 struct fcgi_fd {
+	enum fcgi_fd_type type;
 	enum fcgi_fd_state state;
 	int fd;
 	int server_id;
@@ -33,7 +39,10 @@ struct fcgi_fd_list {
 void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *));
 
-void fcgi_fd_init(struct fcgi_fd *fd, int server_id, int location_id);
+void fcgi_fd_init(struct fcgi_fd *fd,
+		enum fcgi_fd_type type,
+		int server_id,
+		int location_id);
 
 int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state);
 
