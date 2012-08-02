@@ -34,29 +34,6 @@ static __thread struct fcgi_context *fcgi_local_context;
 		pos += fcgi_param_write(env + pos, key, value); \
 	} while (0)
 
-int fcgi_create_static_env(void)
-{
-	mk_pointer key, value;
-
-	mk_api->pointer_set(&key,   "PATH_INFO");
-	mk_api->pointer_set(&value, "");
-	log_info("%.*s=%.*s", (int)key.len, key.data, (int)value.len, value.data);
-
-	mk_api->pointer_set(&key,   "GATEWAY_INTERFACE");
-	mk_api->pointer_set(&value, "CGI/1.1");
-	log_info("%.*s=%.*s", (int)key.len, key.data, (int)value.len, value.data);
-
-	mk_api->pointer_set(&key,   "REDIRECT_STATUS");
-	mk_api->pointer_set(&value, "200");
-	log_info("%.*s=%.*s", (int)key.len, key.data, (int)value.len, value.data);
-
-	mk_api->pointer_set(&key,   "SERVER_SOFTWARE");
-	value = mk_api->config->server_software;
-	log_info("%.*s=%.*s", (int)key.len, key.data, (int)value.len, value.data);
-
-	return 0;
-}
-
 mk_pointer fcgi_create_env(struct client_session *cs,
 		struct session_request *sr)
 {
