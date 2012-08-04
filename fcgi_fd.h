@@ -58,7 +58,10 @@ int fcgi_fd_set_chunk(struct fcgi_fd *fd, struct chunk *a, size_t inherit);
 
 struct chunk *fcgi_fd_get_chunk(struct fcgi_fd *fd);
 
-int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config);
+int fcgi_fd_list_init(struct fcgi_fd_list *fdl,
+		const struct fcgi_fd_matrix fdm,
+		unsigned int thread_id,
+		const struct fcgi_config *config);
 
 void fcgi_fd_list_free(struct fcgi_fd_list *fdl);
 

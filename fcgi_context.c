@@ -25,16 +25,22 @@ void fcgi_context_free(struct fcgi_context *tdata)
 }
 
 int fcgi_context_init(struct fcgi_context *tdata,
-		struct fcgi_config *config,
-		int request_capacity,
-		int request_offset)
+		const struct fcgi_fd_matrix fdm,
+		unsigned int thread_id,
+		unsigned int request_capacity,
+		struct fcgi_config *config)
 {
+	unsigned int request_offset = 1 + request_capacity * thread_id;
+
 	check(!request_list_init(&tdata->rl,
 				config->location_count,
 				request_offset,
 				request_capacity),
 			"Failed to init request list.");
-	check(!fcgi_fd_list_init(&tdata->fdl, config),
+	check(!fcgi_fd_list_init(&tdata->fdl,
+				fdm,
+				thread_id,
+				config),
 			"Failed to init fd list.");
 	chunk_list_init(&tdata->cl);
 
@@ -69,12 +75,12 @@ int fcgi_context_list_init(struct fcgi_context_list *tdlist,
 		int worker_capacity)
 {
 	struct fcgi_context *tdata;
-	const uint16_t request_capacity = next_power_of_2(worker_capacity);
-	uint16_t request_offset = 1;
+	struct fcgi_fd_matrix fdm = fcgi_fd_matrix_create(config, workers);
+	const uint16_t capacity = next_power_of_2(worker_capacity);
 	int i;
 
-	check(request_capacity > 0, "No request capacity.");
-	check(request_capacity < UINT16_MAX, "Request capacity too large.");
+	check(capacity > 0, "No request capacity.");
+	check(capacity < UINT16_MAX, "Request capacity too large.");
 
 	tdlist->thread_id_counter = 0;
 	pthread_mutex_init(&tdlist->thread_id_counter_mutex, NULL);
@@ -88,26 +94,19 @@ int fcgi_context_list_init(struct fcgi_context_list *tdlist,
 		check_mem(tdata);
 		tdlist->tds[i] = tdata;
 
-		check(!fcgi_context_init(tdata,
-					config,
-					request_capacity,
-					request_offset),
-			"Failed to init thread data %d.", i);
-
-		request_offset += request_capacity;
+		check(!fcgi_context_init(tdata, fdm, i, capacity, config),
+			"[THREAD_ID %d] Failed to init thread data.", i);
 	}
 
-	check(request_offset == workers * request_capacity + 1,
-		"You can't freaking count!");
-
+	fcgi_fd_matrix_free(&fdm);
 	return 0;
 error:
+	fcgi_fd_matrix_free(&fdm);
 	fcgi_context_list_free(tdlist);
 	return -1;
 }
 
-int fcgi_context_list_assign_thread_id(
-		struct fcgi_context_list *tdlist)
+int fcgi_context_list_assign_thread_id(struct fcgi_context_list *tdlist)
 {
 	int my_thread_id;
 

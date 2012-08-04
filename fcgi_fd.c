@@ -145,56 +145,60 @@ struct chunk *fcgi_fd_get_chunk(struct fcgi_fd *fd)
 	return fd->chunk;
 }
 
-int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config)
+int fcgi_fd_list_init(struct fcgi_fd_list *fdl,
+		const struct fcgi_fd_matrix fdm,
+		unsigned int thread_id,
+		const struct fcgi_config *config)
 {
-	unsigned int i, j;
-	unsigned int fd_count = 0;
+	const struct fcgi_location *loc;
+	const struct fcgi_server *srv;
 	int server_location_id[config->server_count];
-	ptrdiff_t srv_i;
-	struct fcgi_location *locp;
-	struct fcgi_server *srvp;
-	struct fcgi_fd *tmp = NULL;
+
+	unsigned int fd_count = fcgi_fd_matrix_thread_sum(fdm, thread_id);
+	unsigned int server_fd_count;
 	enum fcgi_fd_type type;
+	unsigned int fd_id = 0;
+	unsigned int i, j;
 
 	for (i = 0; i < config->server_count; i++) {
 		server_location_id[i] = -1;
 	}
-
 	for (i = 0; i < config->location_count; i++) {
-		locp = config->locations + i;
+		loc = config->locations + i;
 
-		for (j = 0; j < locp->server_count; j++) {
-			srv_i = locp->server_ids[j];
-			check(srv_i >= 0 && srv_i < config->server_count,
-				"Location server's index out of range.");
-			check(server_location_id[srv_i] == -1,
-				"Location re-uses server.");
-			server_location_id[srv_i] = i;
-			fd_count += 1;
+		for (j = 0; j < loc->server_count; j++) {
+			server_location_id[loc->server_ids[j]] = i;
 		}
 	}
 
-	check(fd_count > 0, "No locations configured.");
+	fdl->n = fd_count;
+	fdl->fds = NULL;
 
-	tmp = mem_alloc(fd_count * sizeof(*tmp));
-	check_mem(tmp);
+	fdl->fds = mem_alloc(fd_count * sizeof(*fdl->fds));
+	check_mem(fdl->fds);
 
-	for (i = 0; i < fd_count; i++) {
-		srvp = fcgi_config_get_server(config, i);
-		if (srvp->path) {
-			type = FCGI_FD_UNIX;
-		} else {
-			type = FCGI_FD_INET;
+	for (i = 0; i < fdm.server_count; i++) {
+		server_fd_count = fcgi_fd_matrix_get(fdm, thread_id, i);
+
+		srv = fcgi_config_get_server(config, i);
+		check(srv, "No server with id %d.", i);
+		type = srv->path ? FCGI_FD_UNIX : FCGI_FD_INET;
+
+		for (j = 0; j < server_fd_count; j++, fd_id++) {
+			check(server_location_id[i] != -1,
+					"No location for server %s", srv->name);
+			fcgi_fd_init(fdl->fds + fd_id, type, i, server_location_id[i]);
 		}
-
-		fcgi_fd_init(tmp + i, type, i, server_location_id[i]);
 	}
+	check(fd_id == fd_count, "Init too many fcgi_fd.");
 
-	fdl->n   = fd_count;
-	fdl->fds = tmp;
 	return 0;
 error:
-	if (tmp) mem_free(tmp);
+	fdl->n = 0;
+	if (fdl->fds) {
+		mem_free(fdl->fds);
+		fdl->fds = NULL;
+	}
 	return -1;
 }
 
@@ -319,7 +323,6 @@ struct fcgi_fd_matrix fcgi_fd_matrix_create(const struct fcgi_config *config,
 		printf("\n");
 	}
 #endif
-
 	return fdm;
 error:
 	if (fdm.thread_server_fd) {
