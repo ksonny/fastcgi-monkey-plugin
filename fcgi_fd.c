@@ -46,34 +46,27 @@ int fcgi_fd_set_state(struct fcgi_fd *fd, enum fcgi_fd_state state)
 				| FCGI_FD_RECEIVING
 				| FCGI_FD_SLEEPING),
 			"Bad state transition. (A|Re|S) -> R");
-		fd->state &= ~(FCGI_FD_AVAILABLE
-				| FCGI_FD_RECEIVING
-				| FCGI_FD_SLEEPING);
-		fd->state |= FCGI_FD_READY;
+		fd->state = FCGI_FD_READY;
 		break;
 	case FCGI_FD_SENDING:
 		check(fd->state & (FCGI_FD_READY),
 			"Bad state transition. Re -> Se");
-		fd->state &= ~FCGI_FD_READY;
-		fd->state |= FCGI_FD_SENDING;
+		fd->state = FCGI_FD_SENDING;
 		break;
 	case FCGI_FD_RECEIVING:
 		check(fd->state & (FCGI_FD_SENDING),
 			"Bad state transition. Se -> R, %d", fd->state);
-		fd->state &= ~FCGI_FD_SENDING;
-		fd->state |= FCGI_FD_RECEIVING;
+		fd->state = FCGI_FD_RECEIVING;
 		break;
 	case FCGI_FD_CLOSING:
 		check(fd->state & (FCGI_FD_READY | FCGI_FD_RECEIVING),
 			"Bad state transition. R -> C");
-		fd->state &= ~(FCGI_FD_READY | FCGI_FD_RECEIVING);
-		fd->state |= FCGI_FD_CLOSING;
+		fd->state = FCGI_FD_CLOSING;
 		break;
 	case FCGI_FD_SLEEPING:
 		check(fd->state & (FCGI_FD_READY),
 			"Bad state transition. R -> Sl");
-		fd->state &= ~FCGI_FD_READY;
-		fd->state |= FCGI_FD_SLEEPING;
+		fd->state = FCGI_FD_SLEEPING;
 		break;
 	}
 	return 0;
