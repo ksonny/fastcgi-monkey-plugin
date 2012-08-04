@@ -36,6 +36,12 @@ struct fcgi_fd_list {
 	struct fcgi_fd *fds;
 };
 
+struct fcgi_fd_matrix {
+	unsigned int server_count;
+	unsigned int thread_count;
+	unsigned int *thread_server_fd;
+};
+
 void fcgi_fd_module_init(void *(*mem_alloc_p)(const size_t),
 		void (*mem_free_p)(void *));
 
@@ -61,5 +67,28 @@ struct fcgi_fd *fcgi_fd_list_get(struct fcgi_fd_list *fdl,
 		int location_id);
 
 struct fcgi_fd *fcgi_fd_list_get_by_fd(struct fcgi_fd_list *fdl, int fd);
+
+
+/**
+ * fcgi_fd_matrix_create - Create new fd distribution matrix.
+ */
+struct fcgi_fd_matrix fcgi_fd_matrix_create(const struct fcgi_config *config,
+		unsigned int worker_count);
+
+
+void fcgi_fd_matrix_free(struct fcgi_fd_matrix *fdm);
+
+/**
+ * fcgi_fd_matrix_thread_sum - Sum of thread fds.
+ */
+unsigned int fcgi_fd_matrix_thread_sum(const struct fcgi_fd_matrix fdm,
+		unsigned int thread_id);
+
+/**
+ * fcgi_fd_matrix_get - Return number of fds for that server on thread.
+ */
+unsigned int fcgi_fd_matrix_get(const struct fcgi_fd_matrix fdm,
+		unsigned int thread_id,
+		unsigned int server_id);
 
 #endif // __FCGI_FD__

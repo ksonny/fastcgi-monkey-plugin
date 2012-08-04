@@ -1,4 +1,7 @@
 #include <stdlib.h>
+#ifdef DEBUG
+#include <stdio.h>
+#endif
 
 #include "dbg.h"
 #include "fcgi_fd.h"
@@ -189,7 +192,6 @@ int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config)
 
 	fdl->n   = fd_count;
 	fdl->fds = tmp;
-
 	return 0;
 error:
 	if (tmp) mem_free(tmp);
@@ -210,6 +212,7 @@ struct fcgi_fd *fcgi_fd_list_get(struct fcgi_fd_list *fdl,
 
 	for (i = 0; i < fdl->n; i++) {
 		fd = fdl->fds + i;
+
 		if (fd->state & state && fd->location_id == location_id) {
 			return fd;
 		}
@@ -227,4 +230,144 @@ struct fcgi_fd *fcgi_fd_list_get_by_fd(struct fcgi_fd_list *fdl, int fd)
 		}
 	}
 	return NULL;
+}
+
+static void distribute_conns_normal(struct fcgi_fd_matrix fdm,
+		const struct fcgi_location *loc,
+		const struct fcgi_config *config)
+{
+	unsigned int fd_count;
+	const struct fcgi_server *srv;
+	unsigned int i, j, srv_id, t_clock = 0;
+
+	for (i = 0; i < loc->server_count; i++) {
+		srv_id = loc->server_ids[i];
+		srv = fcgi_config_get_server(config, srv_id);
+		fd_count = srv->max_connections;
+
+		for (j = t_clock; fd_count > 0; j = (j + 1) % fdm.thread_count) {
+			fdm.thread_server_fd[j * fdm.server_count + srv_id] += 1;
+			fd_count -= 1;
+		}
+		t_clock = j;
+	}
+}
+
+static void distribute_conns_fallback(struct fcgi_fd_matrix fdm,
+		const struct fcgi_location *loc)
+{
+	unsigned int i, t_id = 0, s_id = 0;
+
+	for (i = 0; t_id < fdm.thread_count; i = (i + 1) % loc->server_count) {
+		s_id = loc->server_ids[i];
+
+		fdm.thread_server_fd[t_id * fdm.server_count + s_id] = 1;
+		t_id++;
+	}
+}
+
+struct fcgi_fd_matrix fcgi_fd_matrix_create(const struct fcgi_config *config,
+		unsigned int worker_count)
+{
+	unsigned int loc_fd_count;
+	const struct fcgi_location *loc;
+	const struct fcgi_server *srv;
+	unsigned int i, j;
+
+	struct fcgi_fd_matrix fdm = {
+		.server_count = config->server_count,
+		.thread_count = worker_count,
+	};
+
+	fdm.thread_server_fd = mk_api->mem_alloc_z(fdm.server_count *
+			fdm.thread_count *
+			sizeof(*fdm.thread_server_fd));
+	check_mem(fdm.thread_server_fd);
+
+	for (i = 0; i < config->location_count; i++) {
+		loc = config->locations + i;
+		loc_fd_count = 0;
+
+		for (j = 0; j < loc->server_count; j++) {
+			srv = fcgi_config_get_server(config, loc->server_ids[j]);
+			loc_fd_count += srv->max_connections > 0 ?
+				srv->max_connections : 1;
+		}
+
+		if (loc_fd_count < worker_count) {
+			log_info("[LOC %s] Sum of server fds less than workers, "
+					"using fallback distribution.",
+					loc->name);
+			if (loc->keep_alive) {
+				log_warn("[LOC %s] Unless keep_alive is disabled "
+					"some threads will be starved.",
+					loc->name);
+			}
+			distribute_conns_fallback(fdm, loc);
+		} else {
+			distribute_conns_normal(fdm, loc, config);
+		}
+	}
+
+#ifdef DEBUG
+	printf("fcgi_fd_matrix:\n");
+	for (i = 0; i < fdm.thread_count; i++) {
+		for (j = 0; j < fdm.server_count; j++) {
+			printf("%5d",
+				fdm.thread_server_fd[i * fdm.server_count + j]);
+		}
+		printf("\n");
+	}
+#endif
+
+	return fdm;
+error:
+	if (fdm.thread_server_fd) {
+		mk_api->mem_free(fdm.thread_server_fd);
+	}
+	return (struct fcgi_fd_matrix){
+		.server_count = 0,
+		.thread_count = 0,
+		.thread_server_fd = NULL,
+	};
+}
+
+void fcgi_fd_matrix_free(struct fcgi_fd_matrix *fdm)
+{
+	fdm->thread_count = 0;
+	fdm->server_count = 0;
+	if (fdm->thread_server_fd) {
+		mk_api->mem_free(fdm->thread_server_fd);
+		fdm->thread_server_fd = NULL;
+	}
+}
+
+unsigned int fcgi_fd_matrix_thread_sum(const struct fcgi_fd_matrix fdm,
+		unsigned int thread_id)
+{
+	unsigned int fd_count = 0;
+	unsigned int *row_ptr = fdm.thread_server_fd +
+		thread_id * fdm.server_count;
+	unsigned int i;
+
+	check(fdm.thread_server_fd, "fcgi_fd_matrix is uninitialized.");
+
+	for (i = 0; i < fdm.server_count; i++) {
+		fd_count += row_ptr[i];
+	}
+
+	return fd_count;
+error:
+	return 0;
+}
+
+unsigned int fcgi_fd_matrix_get(const struct fcgi_fd_matrix fdm,
+		unsigned int thread_id,
+		unsigned int server_id)
+{
+	check(fdm.thread_server_fd, "fcgi_fd_matrix is uninitialized.");
+
+	return fdm.thread_server_fd[thread_id * fdm.server_count + server_id];
+error:
+	return 0;
 }
