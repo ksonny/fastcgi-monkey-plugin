@@ -9,7 +9,7 @@
 
 void fcgi_config_free(struct fcgi_config *config)
 {
-	int i;
+	unsigned int i;
 	struct fcgi_location *locp;
 	struct fcgi_server *srvp;
 
@@ -56,7 +56,7 @@ void fcgi_config_free(struct fcgi_config *config)
 
 static int fcgi_validate_conf(struct fcgi_config *config)
 {
-	int i, j;
+	unsigned int i, j;
 	struct fcgi_location *locp;
 	struct fcgi_server *srvp;
 	ptrdiff_t srv_i;
@@ -79,8 +79,10 @@ static int fcgi_validate_conf(struct fcgi_config *config)
 
 		for (j = 0; j < locp->server_count; j++) {
 			srv_i = locp->server_ids[j];
-			check(srv_i >= 0 && srv_i < config->server_count,
-				"Location server index out of range.");
+
+			check(srv_i < config->server_count,
+				"[LOC %s] Server index out of range.",
+				locp->name);
 			used_servers[srv_i] += 1;
 		}
 	}
@@ -90,10 +92,10 @@ static int fcgi_validate_conf(struct fcgi_config *config)
 		srvp = config->servers + i;
 
 		check(used_servers[i] < 2,
-			"Server %s used by multiple locations.", srvp->name);
+			"[SRV %s] Used by multiple locations.", srvp->name);
 
 		if (used_servers[i] == 0) {
-			log_warn("Server %s is unused.", srvp->name);
+			log_warn("[SRV %s] Unused.", srvp->name);
 		}
 
 		check((srvp->addr && srvp->port) || srvp->path,
@@ -120,6 +122,9 @@ int fcgi_config_read_server(struct fcgi_server *srv,
 
 	srv->name = mk_api->config_section_getval(section,
 		"ServerName", MK_CONFIG_VAL_STR);
+	check(srv->name,
+		"Server has no ServerName.");
+
 	srv->path = mk_api->config_section_getval(section,
 		"ServerPath", MK_CONFIG_VAL_STR);
 
@@ -144,14 +149,12 @@ int fcgi_config_read_server(struct fcgi_server *srv,
 	}
 
 	srv->max_connections = (long int)mk_api->config_section_getval(section,
-		"MaxConnectionss", MK_CONFIG_VAL_NUM);
+		"MaxConnections", MK_CONFIG_VAL_NUM);
 	srv->max_requests = (long int)mk_api->config_section_getval(section,
 		"MaxRequests", MK_CONFIG_VAL_NUM);
 
-	check(srv->name,
-		"Server decleration ignored, no ServerName.");
 	check(srv->addr || srv->path,
-		"Server decleration ignored, no ServerAddr or ServerPath.");
+		"[SRV %s] No ServerAddr or ServerPath.", srv->name);
 	return 0;
 error:
 	if (srv->addr && tmp) mk_api->mem_free(tmp);
@@ -320,10 +323,10 @@ error:
 	return -1;
 }
 
-struct fcgi_location *fcgi_config_get_location(struct fcgi_config *config,
-		int location_id)
+struct fcgi_location *fcgi_config_get_location(const struct fcgi_config *config,
+		unsigned int location_id)
 {
-	check(location_id >= 0 && location_id < config->location_count,
+	check(location_id < config->location_count,
 		"Location id out of range: %d.", location_id);
 
 	return config->locations + location_id;
@@ -331,10 +334,10 @@ error:
 	return NULL;
 }
 
-struct fcgi_server *fcgi_config_get_server(struct fcgi_config *config,
-		int server_id)
+struct fcgi_server *fcgi_config_get_server(const struct fcgi_config *config,
+		unsigned int server_id)
 {
-	check(server_id >= 0 && server_id < config->server_count,
+	check(server_id < config->server_count,
 		"Server id out of range: %d.", server_id);
 
 	return config->servers + server_id;

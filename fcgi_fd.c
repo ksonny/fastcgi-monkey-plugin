@@ -147,8 +147,8 @@ struct chunk *fcgi_fd_get_chunk(struct fcgi_fd *fd)
 
 int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config)
 {
-	int i, j;
-	int fd_count = 0;
+	unsigned int i, j;
+	unsigned int fd_count = 0;
 	int server_location_id[config->server_count];
 	ptrdiff_t srv_i;
 	struct fcgi_location *locp;

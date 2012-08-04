@@ -292,7 +292,8 @@ int fcgi_prepare_request(struct request *req)
 	};
 	struct fcgi_location *location;
 
-	size_t len = 4096, pos = 0, tmp, ret;
+	size_t len = 4096, pos = 0, tmp;
+	ssize_t ret;
 	uint8_t *buffer;
 
 	buffer = mk_api->mem_alloc(len);
@@ -639,7 +640,7 @@ error:
 static int regex_match_location(const struct fcgi_config *config,
 		const char *uri)
 {
-	int i;
+	unsigned int i;
 	regex_t *regp;
 
 	for (i = 0; i < config->location_count; i++) {
