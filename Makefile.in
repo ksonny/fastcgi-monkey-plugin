@@ -1,22 +1,21 @@
-_PATH   = $(patsubst $(monkey_root)/%, %, $(CURDIR))
+all: monkey-fastcgi.so
+
+include ../Make.common
+
 CC	= @echo "  CC   $(_PATH)/$@"; $CC
 CC_QUIET= @echo -n; $CC
 CFLAGS	= $CFLAGS
 LDFLAGS = $LDFLAGS
 DEFS    = $DEFS
-INCDIR  = ../../src/include
-FASTCGI_OBJECTS = fastcgi.o protocol.o chunk.o request.o fcgi_fd.o fcgi_config.o fcgi_context.o
+OBJECTS = fastcgi.o \
+	protocol.o \
+	chunk.o \
+	request.o \
+	fcgi_fd.o \
+	fcgi_config.o \
+	fcgi_context.o
 
-all: monkey-fastcgi.so
+-include $(OBJECTS:.o=.d)
 
--include $(FASTCGI_OBJECTS:.o=.d)
-
-monkey-fastcgi.so: $(FASTCGI_OBJECTS)
+monkey-fastcgi.so: $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(DEFS) -shared -o $@ $^ -lc
-
-.c.o:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(DEFS) -I$(INCDIR) -fPIC -c $<
-	$(CC_QUIET) -MM -MP $(CFLAGS) $(DEFS) $(LDFLAGS) -I$(INCDIR) $*.c -o $*.d > /dev/null &2>&1
-
-clean:
-	rm -rf *.[od] *~ *.*so*
