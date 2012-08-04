@@ -161,7 +161,7 @@ int fcgi_fd_list_init(struct fcgi_fd_list *fdl, struct fcgi_config *config)
 		locp = config->locations + i;
 
 		for (j = 0; j < locp->server_count; j++) {
-			srv_i = locp->servers[j] - config->servers;
+			srv_i = locp->server_ids[j];
 			check(srv_i >= 0 && srv_i < config->server_count,
 				"Location server's index out of range.");
 			check(server_location_id[srv_i] == -1,

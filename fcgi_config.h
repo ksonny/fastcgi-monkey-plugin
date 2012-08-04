@@ -23,7 +23,7 @@ struct fcgi_location {
 	int keep_alive;
 
 	int server_count;
-	struct fcgi_server **servers;
+	unsigned int *server_ids;
 };
 
 struct fcgi_config {

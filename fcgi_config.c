@@ -23,8 +23,8 @@ void fcgi_config_free(struct fcgi_config *config)
 				mk_api->mem_free(locp->name);
 			}
 
-			if (locp->servers) {
-				mk_api->mem_free(locp->servers);
+			if (locp->server_ids) {
+				mk_api->mem_free(locp->server_ids);
 			}
 		}
 
@@ -78,7 +78,7 @@ static int fcgi_validate_conf(struct fcgi_config *config)
 			"No servers configured for location %d.", i);
 
 		for (j = 0; j < locp->server_count; j++) {
-			srv_i = locp->servers[j] - config->servers;
+			srv_i = locp->server_ids[j];
 			check(srv_i >= 0 && srv_i < config->server_count,
 				"Location server index out of range.");
 			used_servers[srv_i] += 1;
@@ -207,15 +207,16 @@ int fcgi_config_read_location(struct fcgi_location *loc,
 	}
 	loc_server_n += 1;
 
-	loc->servers = mk_api->mem_alloc_z(loc_server_n * sizeof(*loc->servers));
-	check_mem(loc->servers);
+	loc->server_ids = mk_api->mem_alloc_z(loc_server_n *
+			sizeof(*loc->server_ids));
+	check_mem(loc->server_ids);
 
 	for (tok = strtok(server_names, ", "); tok; tok = strtok(NULL, ", ")) {
 		for (i = 0; i < server_count; i++) {
 			if (strcmp(servers[i].name, tok))
 				continue;
 
-			loc->servers[loc_server_i] = servers + i;
+			loc->server_ids[loc_server_i] = i;
 			loc_server_i++;
 		}
 	}
@@ -231,7 +232,7 @@ error:
 		log_err("Regex compile failed: %s", error_str);
 	}
 	regfree(&loc->match_regex);
-	if (loc->servers) mk_api->mem_free(loc->servers);
+	if (loc->server_ids) mk_api->mem_free(loc->server_ids);
 	if (server_names) mk_api->mem_free(server_names);
 	if (keep_alive) mk_api->mem_free(keep_alive);
 	if (regex) mk_api->mem_free(regex);
