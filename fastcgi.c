@@ -208,7 +208,7 @@ int fcgi_wake_connection(int location_id)
 		PLUGIN_TRACE("[FCGI_FD %d] Waking up connection.", fd->fd);
 		mk_api->event_socket_change_mode(fd->fd,
 				MK_EPOLL_WAKEUP,
-				MK_EPOLL_EDGE_TRIGGERED);
+				MK_EPOLL_LEVEL_TRIGGERED);
 		fcgi_fd_set_state(fd, FCGI_FD_READY);
 	}
 	return 0;
@@ -269,7 +269,7 @@ int fcgi_new_connection(int location_id)
 	mk_api->event_add(fd->fd,
 			MK_EPOLL_RW,
 			plugin,
-			MK_EPOLL_EDGE_TRIGGERED);
+			MK_EPOLL_LEVEL_TRIGGERED);
 
 	fcgi_fd_set_state(fd, FCGI_FD_READY);
 
@@ -939,7 +939,7 @@ int _mkp_event_write(int socket)
 
 			mk_api->event_socket_change_mode(fd->fd,
 				MK_EPOLL_SLEEP,
-				MK_EPOLL_EDGE_TRIGGERED);
+				MK_EPOLL_LEVEL_TRIGGERED);
 			check(!fcgi_fd_set_state(fd, FCGI_FD_SLEEPING),
 				"Failed to set fd state.");
 
