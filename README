@@ -1,4 +1,32 @@
 FastCGI plugin
 ==============
 
-Please enable KeepAlive.
+This is a FastCGI plugin for the [Monkey HTTP daemon](http://monkey-project.com/).
+
+It's expected use is serving dynamic content pages, using php5-fpm, some
+libfcgi application or anything that supports the FastCGI protocol.
+
+Features
+========
+
+* Supports the responder FastCGI application role.
+* Supports persistent connections.
+* Handle multiple locations, served by multiple severs.
+* Distributes available server connections fairly.
+* Serves request first in, first out per location.
+
+Requirements
+============
+
+* Latest [Monkey HTTP daemon](http://monkey-project.com/) git master.
+
+Installation
+============
+
+    cd monkey
+    git clone https://github.com/ksonny/fastcgi-monkey-plugin.git plugins/fastcgi
+    ./configure
+    make
+    # Edit conf/plugins/fastcgi.conf
+    # Startup your fastcgi daemons
+    ./bin/monkey
