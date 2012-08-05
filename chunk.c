@@ -285,7 +285,7 @@ int chunk_iov_add(struct chunk_iov *iov, struct chunk_ptr cp)
 	struct chunk_ref *cr;
 	struct iovec *io;
 
-	check(iov->index < iov->size, "chunk_iov is full.");
+	check_debug(iov->index < iov->size, "chunk_iov is full.");
 	check(cp.len > 0, "tried to add empty chunk_ptr");
 
 	cr = iov->held_refs + iov->index;
