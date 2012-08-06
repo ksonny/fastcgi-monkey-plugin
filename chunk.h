@@ -5,6 +5,15 @@
 
 #include "mk_list.h"
 
+/**
+ * struct chunk - Contains a chunk of data.
+ * @read: Current read position in chunk.
+ * @write: Current write position in chunk.
+ * @size: Size of container data area.
+ * @refs: Refereces held off this chunk.
+ *
+ * Chunks are used as reference counted flexible sized data containers.
+ */
 struct chunk {
 	struct mk_list _head;
 
@@ -16,6 +25,12 @@ struct chunk {
 	uint8_t data[0];
 };
 
+/**
+ * struct chunk_ptr - A pointer to data inside a chunk.
+ * @parent: A pointer to chunk.
+ * @len: Length of data.
+ * @data: Pointer to data inside chunk.
+ */
 struct chunk_ptr {
 	struct chunk *parent;
 	size_t   len;
@@ -26,22 +41,38 @@ struct chunk_list {
 	struct chunk chunks;
 };
 
+/**
+ * enum chunk_ref_type - Type enum for struct chunk_ref.
+ */
 enum chunk_ref_type {
 	CHUNK_REF_NULL = 0,
 	CHUNK_REF_CHUNK,
 	CHUNK_REF_UINT8,
 };
 
+/**
+ * union chunk_ref_union - A data union for struct chunk_ref. 
+ */
 union chunk_ref_union {
 	struct chunk *chunk;
 	uint8_t *ptr;
 };
 
+/**
+ * struct chunk_ref - Reference to either to chunk or malloc memory.
+ * @t: Type of reference.
+ * @u: Data reference.
+ */
 struct chunk_ref {
 	enum chunk_ref_type t;
 	union chunk_ref_union u;
 };
 
+/**
+ * struct chunk_iov - A vector IO container.
+ * @index: Index of next unused vector entry.
+ * @size: Maximum number of allowed entries.
+ */
 struct chunk_iov {
 	int index;
 	int size;
