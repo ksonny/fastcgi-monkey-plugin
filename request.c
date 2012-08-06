@@ -45,7 +45,12 @@ int request_init(struct request *req, int iov_n)
 		.cs = NULL,
 		.sr = NULL,
 
-		.iov = {0},
+		.iov = {
+			.index = 0,
+			.size = 0,
+			.held_refs = NULL,
+			.io = NULL,
+		},
 	};
 
 	check(!chunk_iov_init(&req->iov, iov_n), "Failed to init chunk_iov.");
