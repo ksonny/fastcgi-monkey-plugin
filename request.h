@@ -6,6 +6,18 @@
 
 #define MAX_PACKAGES 32
 
+/**
+ * enum request_state - State of request.
+ *
+ * REQ_AVAILABLE: Struct is not used by any running request.
+ * REQ_ASSIGNED: Struct is assigned to a request and initialized.
+ * REQ_SENT: Begin request package has been queued at a fcgi_fd.
+ * REQ_STREAM_CLOSED: Response has been received from fcgi_fd.
+ * REQ_ENDED: End request package has been received from fcgi_fd.
+ * REQ_FINISHED: Response has been sent to client.
+ * REQ_FAILED: The request has failed somewhere.
+ *
+ */
 enum request_state {
 	REQ_AVAILABLE     = 1,
 	REQ_ASSIGNED      = 2,
@@ -16,10 +28,30 @@ enum request_state {
 	REQ_FAILED        = 7,
 };
 
+/**
+ * enum request_flags - Flags on request.
+ *
+ * REQ_SLEEPING: Request fd event has been put to sleep.
+ */
 enum request_flags {
 	REQ_SLEEPING = 1,
 };
 
+/**
+ * struct request - Request datatype.
+ * @state: State of request.
+ * @flags: Flags of request.
+ *
+ * @fd: Client socket.
+ * @fcgi_fd: FastCGI server fd.
+ *
+ * @clock_id: Index of request_list clock.
+ *
+ * @cs: Client session struct.
+ * @sr: Session request struct.
+ *
+ * @iov: Input and output reference container.
+ */
 struct request {
 	enum request_state state;
 	enum request_flags flags;
@@ -35,6 +67,9 @@ struct request {
 	struct chunk_iov iov;
 };
 
+/**
+ * struct req_cache_entry - A cache entry.
+ */
 struct req_cache_entry {
 	struct request *req;
 	int fd;
@@ -42,15 +77,20 @@ struct req_cache_entry {
 	int counter;
 };
 
+/* Number of entries in request_cache, must be power of 2. */
 #define REQ_CACHE_SIZE 32
 
+/**
+ * struct request_cache - Cached entries.
+ */
 struct request_cache {
 	struct req_cache_entry entries[REQ_CACHE_SIZE];
 	uint16_t clock_hand;
 	uint16_t mask;
 };
 
-/** struct request_list - tracks list of requests
+/**
+ * struct request_list - tracks list of requests
  * @n: Number of entries in list.
  * @id_offset: Substracted from req_id to get index in list.
  * @clock_count: Number of clock hands available.
