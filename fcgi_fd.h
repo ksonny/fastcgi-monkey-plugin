@@ -4,11 +4,25 @@
 #include "chunk.h"
 #include "fcgi_config.h"
 
+/**
+ * enum fcgi_fd_type - The FastCGI file descriptor socket type.
+ */
 enum fcgi_fd_type {
 	FCGI_FD_UNIX,
 	FCGI_FD_INET,
 };
 
+/**
+ * enum fcgi_fd_state - The state of a FastCGI fd.
+ *
+ * FCGI_FD_AVAILABLE: Structure is not in use by any FastCGI fd.
+ * FCGI_FD_READY: A new request may be sent.
+ * FCGI_FD_SENDING: A request is being sent.
+ * FCGI_FD_RECEIVING: Receiving reponse.
+ * FCGI_FD_CLOSING: The fd should be closed shortly.
+ * FCGI_FD_SLEEPING: Fd event has been put to sleep.
+ *
+ */
 enum fcgi_fd_state {
 	FCGI_FD_AVAILABLE = 1,
 	FCGI_FD_READY     = 2,
@@ -18,6 +32,22 @@ enum fcgi_fd_state {
 	FCGI_FD_SLEEPING  = 32,
 };
 
+/**
+ * struct fcgi_fd
+ * @type: Socket type.
+ * @state: State of fd.
+ * @fd: FastCGI socket fd.
+ * @server_id: Index of configured server in fcgi_config.
+ * @location_id: Index of configured location in fcgi_config.
+ *
+ * @begin_req_remain: Remaining bytes on begin request message.
+ * @begin_req: Begin request message container.
+ *
+ * @chunk: Currently attached chunk.
+ *
+ * Used on non-blocking FastCGI connection to track their state and
+ * context.
+ */
 struct fcgi_fd {
 	enum fcgi_fd_type type;
 	enum fcgi_fd_state state;
@@ -36,6 +66,12 @@ struct fcgi_fd_list {
 	struct fcgi_fd *fds;
 };
 
+/**
+ * struct fcgi_fd_matrix - Distribution of server fds on worker threads.
+ * @server_count: Number of servers.
+ * @thread_count: Number of worker threads.
+ * @thread_server_fd: A thread_count X server_count matrix of fd count.
+ */
 struct fcgi_fd_matrix {
 	unsigned int server_count;
 	unsigned int thread_count;
