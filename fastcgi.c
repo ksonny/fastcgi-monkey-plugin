@@ -211,12 +211,11 @@ static size_t fcgi_parse_cgi_headers(struct session_request *sr,
 			break;
 		}
 		cnt += (size_t)(q - p) + 1;
-		if (p + 2 >= q) {
-			if (*(q + 1) == '\r') {
-				cnt += 2;
-			} else {
-				cnt += 1;
-			}
+		if (p + 1 == q) {
+			break;
+		}
+		else if (p + 1 == q) {
+			cnt += 1;
 			break;
 		}
 
