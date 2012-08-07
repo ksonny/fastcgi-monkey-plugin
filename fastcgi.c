@@ -186,7 +186,7 @@ static int fcgi_handle_cgi_header(struct session_request *sr,
 	}
 	else if (!strncasecmp(entry, "Location", 8)) {
 		value = entry + 8 + 2;
-		log_warn("Redirect is not implemented for FastCGI scripts.");
+		sr->headers.location = strndup(value, len - 10);
 	}
 	else if (!strncasecmp(entry, "Status", 6)) {
 		value = entry + 6 + 2;
@@ -453,13 +453,19 @@ int fcgi_end_request(struct request *req)
 	mk_api->header_set_http_status(req->sr, MK_HTTP_OK);
 	headers_offset = fcgi_parse_cgi_headers(req->sr, &req->iov);
 
-	chunk_iov_drop(&req->iov, headers_offset);
-	req->sr->headers.content_length = chunk_iov_length(&req->iov);
+	if (req->sr->headers.location) {
+		mk_api->header_send(req->fd, req->cs, req->sr);
+		req->sr->headers.location = NULL;
+	}
+	else {
+		chunk_iov_drop(&req->iov, headers_offset);
+		req->sr->headers.content_length = chunk_iov_length(&req->iov);
 
-	mk_api->header_send(req->fd, req->cs, req->sr);
+		mk_api->header_send(req->fd, req->cs, req->sr);
 
-	ret = chunk_iov_sendv(req->fd, &req->iov);
-	check(ret, "[FD %d] Failed to send request response.", req->fd);
+		ret = chunk_iov_sendv(req->fd, &req->iov);
+		check(ret, "[FD %d] Failed to send request response.", req->fd);
+	}
 
 	mk_api->socket_cork_flag(req->fd, TCP_CORK_OFF);
 	chunk_iov_reset(&req->iov);
