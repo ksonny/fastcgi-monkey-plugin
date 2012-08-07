@@ -1,10 +1,11 @@
 FastCGI plugin
 ==============
 
-This is a FastCGI plugin for the [Monkey HTTP daemon](http://monkey-project.com/).
+This is a FastCGI proxy plugin for the [Monkey HTTP daemon](http://monkey-project.com/).
 
-It's expected use is serving dynamic content pages, using php5-fpm, some
-libfcgi application or anything that supports the FastCGI protocol.
+The module proxies requests to FastCGI application servers. It does not
+itself spawn any server instances, instead relying on the user to spawn
+these using third-party tools such as php5-fpm, fcgi-cgi or spawn-fcgi.
 
 Features
 ========
@@ -13,7 +14,9 @@ Features
 * Supports persistent connections.
 * Handle multiple locations, served by multiple severs.
 * Distributes available server connections fairly.
-* Serves request first in, first out per location.
+* Serves request almost first in, first out per location.
+  (A fast location may break the ordering for a slower location,
+  but a request will always be served.)
 
 Requirements
 ============
