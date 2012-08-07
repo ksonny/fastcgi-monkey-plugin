@@ -170,20 +170,60 @@ error:
 
 #undef __write_param
 
-static size_t fcgi_parse_cgi_headers(const char *data, size_t len)
+static int fcgi_handle_cgi_header(struct session_request *sr,
+		char *entry,
+		size_t len)
 {
-	size_t cnt = 0, i;
-	const char *p = data, *q = NULL;
+	char *value;
+	int status;
 
-	for (i = 0; q < (data + len); i++) {
+	if (!strncasecmp(entry, "Content-type", 12)) {
+		value = entry + 12 + 2;
+		sr->headers.content_type = (mk_pointer){
+			.data = value,
+			.len = len - 14,
+		};
+	}
+	else if (!strncasecmp(entry, "Location", 8)) {
+		value = entry + 8 + 2;
+		log_warn("Redirect is not implemented for FastCGI scripts.");
+	}
+	else if (!strncasecmp(entry, "Status", 6)) {
+		value = entry + 6 + 2;
+		check(sscanf(value, "%d", &status) == 1,
+			"Could not scan status from FastCGI return.");
+		mk_api->header_set_http_status(sr, status);
+	}
+	return 0;
+error:
+	return -1;
+}
+
+static size_t fcgi_parse_cgi_headers(struct session_request *sr,
+		struct chunk_iov *iov)
+{
+	size_t cnt = 0, entry_len, i, len = iov->io[0].iov_len;
+	char *p = iov->io[0].iov_base, *q = NULL;
+
+	for (i = 0; cnt < len; i++) {
 		q = memchr(p, '\n', len);
 		if (!q) {
 			break;
 		}
 		cnt += (size_t)(q - p) + 1;
 		if (p + 2 >= q) {
+			if (*(q + 1) == '\r') {
+				cnt += 2;
+			} else {
+				cnt += 1;
+			}
 			break;
 		}
+
+		entry_len = q - p + 1;
+
+		fcgi_handle_cgi_header(sr, p, entry_len);
+
 		p = q + 1;
 	}
 	return cnt;
@@ -411,19 +451,18 @@ int fcgi_end_request(struct request *req)
 	ssize_t headers_offset;
 	ssize_t ret;
 
-	headers_offset = fcgi_parse_cgi_headers(req->iov.io[0].iov_base,
-			req->iov.io[0].iov_len);
+	mk_api->header_set_http_status(req->sr, MK_HTTP_OK);
+	headers_offset = fcgi_parse_cgi_headers(req->sr, &req->iov);
 
-	mk_api->header_set_http_status(req->sr,  MK_HTTP_OK);
-	req->sr->headers.cgi = SH_CGI;
-	req->sr->headers.content_length =
-		chunk_iov_length(&req->iov) - headers_offset;
+	chunk_iov_drop(&req->iov, headers_offset);
+	req->sr->headers.content_length = chunk_iov_length(&req->iov);
 
 	mk_api->header_send(req->fd, req->cs, req->sr);
-	ret = chunk_iov_sendv(req->fd, &req->iov);
-	check(ret, "Failed to send end_request.");
-	mk_api->socket_cork_flag(req->fd, TCP_CORK_OFF);
 
+	ret = chunk_iov_sendv(req->fd, &req->iov);
+	check(ret, "[FD %d] Failed to send request response.", req->fd);
+
+	mk_api->socket_cork_flag(req->fd, TCP_CORK_OFF);
 	chunk_iov_reset(&req->iov);
 	return 0;
 error:
