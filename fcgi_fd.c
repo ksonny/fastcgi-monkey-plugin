@@ -153,7 +153,7 @@ int fcgi_fd_list_init(struct fcgi_fd_list *fdl,
 	unsigned int fd_id = 0;
 	unsigned int i, j;
 
-	for (i = 0; i < config->server_count; i++) {
+	for (i = 0; i < fdm.server_count; i++) {
 		server_location_id[i] = -1;
 	}
 	for (i = 0; i < config->location_count; i++) {
@@ -237,6 +237,8 @@ static void distribute_conns_normal(struct fcgi_fd_matrix fdm,
 	const struct fcgi_server *srv;
 	unsigned int i, j, srv_id, t_clock = 0;
 
+	check(fdm.thread_count > 0, "Struct fcgi_fd_matrix not initialized.");
+
 	for (i = 0; i < loc->server_count; i++) {
 		srv_id = loc->server_ids[i];
 		srv = fcgi_config_get_server(config, srv_id);
@@ -248,6 +250,8 @@ static void distribute_conns_normal(struct fcgi_fd_matrix fdm,
 		}
 		t_clock = j;
 	}
+error:
+	return;
 }
 
 static void distribute_conns_fallback(struct fcgi_fd_matrix fdm,
@@ -255,12 +259,16 @@ static void distribute_conns_fallback(struct fcgi_fd_matrix fdm,
 {
 	unsigned int i, t_id = 0, s_id = 0;
 
+	check(loc->server_count > 0, "No servers for this location.");
+
 	for (i = 0; t_id < fdm.thread_count; i = (i + 1) % loc->server_count) {
 		s_id = loc->server_ids[i];
 
 		fdm.thread_server_fd[t_id * fdm.server_count + s_id] = 1;
 		t_id++;
 	}
+error:
+	return;
 }
 
 struct fcgi_fd_matrix fcgi_fd_matrix_create(const struct fcgi_config *config,

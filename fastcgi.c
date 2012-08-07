@@ -931,7 +931,9 @@ int _mkp_event_write(int socket)
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
 	else if (req && req->state == REQ_FAILED) {
+#ifdef TRACE
 		req_id = request_list_index_of(rl, req);
+#endif
 
 		PLUGIN_TRACE("[REQ_ID %d] Request failed.", req_id);
 		mk_api->http_request_error(MK_SERVER_INTERNAL_ERROR,
