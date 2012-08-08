@@ -32,9 +32,11 @@ enum request_state {
  * enum request_flags - Flags on request.
  *
  * REQ_SLEEPING: Request fd event has been put to sleep.
+ * REQ_HEADERS_SENT: Request response headers sent.
  */
 enum request_flags {
 	REQ_SLEEPING = 1,
+	REQ_HEADERS_SENT = 2,
 };
 
 /**
