@@ -477,30 +477,64 @@ error:
 	return -1;
 }
 
-int fcgi_end_request(struct request *req)
+int fcgi_send_response_headers(struct request *req)
 {
 	ssize_t headers_offset;
-	ssize_t ret;
+
+	if (request_get_flag(req, REQ_HEADERS_SENT)) {
+		return 0;
+	}
 
 	mk_api->header_set_http_status(req->sr, MK_HTTP_OK);
-	headers_offset = fcgi_parse_cgi_headers(req->sr, &req->iov);
+	req->sr->headers.cgi = SH_NOCGI;
 
-	if (req->sr->headers.location) {
-		mk_api->header_send(req->fd, req->cs, req->sr);
-		req->sr->headers.location = NULL;
+	PLUGIN_TRACE("[FD %d] Length prior to removing headers is %ld.",
+			req->fd, chunk_iov_length(&req->iov));
+
+	headers_offset = fcgi_parse_cgi_headers(req->sr, &req->iov);
+	check(!chunk_iov_drop(&req->iov, headers_offset),
+		"Failed to drop from req->iov.");
+	req->sr->headers.content_length = chunk_iov_length(&req->iov);
+
+	PLUGIN_TRACE("[FD %d] Headers length is %ld.",
+			req->fd, headers_offset);
+
+	mk_api->header_send(req->fd, req->cs, req->sr);
+	req->sr->headers.location = NULL;
+
+	request_set_flag(req, REQ_HEADERS_SENT);
+
+	return 0;
+error:
+	return -1;
+}
+
+int fcgi_send_response(struct request *req)
+{
+	int fd = req->fd;
+	ssize_t ret;
+
+	check(request_get_flag(req, REQ_HEADERS_SENT),
+		"Headers not yet sent for request.");
+
+	ret = chunk_iov_sendv(fd, &req->iov);
+
+	PLUGIN_TRACE("[FD %d] Wrote %ld bytes.", fd, ret);
+	check(ret != -1, "[FD %d] Failed to send request response.", fd);
+
+	if (ret == (ssize_t)chunk_iov_length(&req->iov)) {
+		check(!request_set_state(req, REQ_FINISHED),
+			"Failed to set request state.");
+		request_recycle(req);
+
+		mk_api->socket_cork_flag(fd, TCP_CORK_OFF);
+		mk_api->http_request_end(fd);
 	}
 	else {
-		chunk_iov_drop(&req->iov, headers_offset);
-		req->sr->headers.content_length = chunk_iov_length(&req->iov);
-
-		mk_api->header_send(req->fd, req->cs, req->sr);
-
-		ret = chunk_iov_sendv(req->fd, &req->iov);
-		check(ret, "[FD %d] Failed to send request response.", req->fd);
+		check(!chunk_iov_drop(&req->iov, ret),
+			"Failed to drop data from chunk.");
 	}
 
-	mk_api->socket_cork_flag(req->fd, TCP_CORK_OFF);
-	chunk_iov_reset(&req->iov);
 	return 0;
 error:
 	return -1;
@@ -749,8 +783,8 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		return MK_PLUGIN_RET_CONTINUE;
 	}
 
-	uri = mk_api->mem_alloc_z(sr->uri.len + 1);
-	memcpy(uri, sr->uri.data, sr->uri.len);
+	uri = mk_api->mem_alloc_z(sr->real_path.len + 1);
+	memcpy(uri, sr->real_path.data, sr->real_path.len);
 
 	location_id = regex_match_location(&fcgi_global_config, uri);
 	mk_api->mem_free(uri);
@@ -952,13 +986,10 @@ int _mkp_event_write(int socket)
 
 		PLUGIN_TRACE("[REQ_ID %d] Request ended.", req_id);
 
-		check(!fcgi_end_request(req),
-			"[REQ_ID %d] Failed to end request.", req_id);
-		check(!request_set_state(req, REQ_FINISHED),
-			"[REQ_ID %d] Request state transition failed.", req_id);
-
-		request_recycle(req);
-		mk_api->http_request_end(socket);
+		check(!fcgi_send_response_headers(req),
+			"[REQ_ID %d] Failed to send response headers.", req_id);
+		check(!fcgi_send_response(req),
+			"[REQ_ID %d] Failed to send response.", req_id);
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
