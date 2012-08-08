@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -45,6 +46,9 @@ size_t fcgi_create_env(uint8_t *ptr,
 	size_t pos = 0;
 	struct sockaddr_in addr;
 	socklen_t addr_len;
+	int i, j;
+	char *hinit, *hend;
+	size_t hlen;
 
 	mk_api->pointer_set(&key,   "PATH_INFO");
 	mk_api->pointer_set(&value, "");
@@ -106,10 +110,6 @@ size_t fcgi_create_env(uint8_t *ptr,
 	value = sr->method_p;
 	__write_param(ptr, len, pos, key, value);
 
-	mk_api->pointer_set(&key,   "HTTP_HOST");
-	value = sr->host;
-	__write_param(ptr, len, pos, key, value);
-
 	addr_len = sizeof(addr);
 	if (!getpeername(cs->socket, (struct sockaddr *)&addr, &addr_len)) {
 		inet_ntop(AF_INET, &addr.sin_addr, buffer, 128);
@@ -153,13 +153,30 @@ size_t fcgi_create_env(uint8_t *ptr,
 	mk_api->pointer_set(&value, buffer);
 	__write_param(ptr, len, pos, key, value);
 
-	mk_api->pointer_set(&key,   "HTTP_COOKIE");
-	value = mk_api->header_get(&sr->headers_toc, "Cookie:", 7);
-	__write_param(ptr, len, pos, key, value);
+	strcpy(buffer, "HTTP_");
 
-	mk_api->pointer_set(&key,   "HTTP_USER_AGENT");
-	value = mk_api->header_get(&sr->headers_toc, "User-Agent:", 11);
-	__write_param(ptr, len, pos, key, value);
+	for (i = 0; i < sr->headers_toc.length; i++) {
+		hinit = sr->headers_toc.rows[i].init;
+		hend = sr->headers_toc.rows[i].end;
+		hlen = hend - hinit;
+
+		for (j = 0; j < hlen; j++) {
+			if (hinit[j] == ':') {
+				break;
+			}
+			else if (hinit[j] != '-') {
+				buffer[5 + j] = toupper(hinit[j]);
+			}
+			else {
+				buffer[5 + j] = '_';
+			}
+		}
+
+		key = (mk_pointer){.len = 5 + j, .data = buffer};
+		value = (mk_pointer){.len = hlen - j - 2, .data = hinit + j + 2};
+
+		__write_param(ptr, len, pos, key, value);
+	}
 
 	if (tmpuri) mk_api->mem_free(tmpuri);
 	return pos;
