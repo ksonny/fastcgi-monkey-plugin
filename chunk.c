@@ -256,24 +256,28 @@ int chunk_iov_drop(struct chunk_iov *iov, size_t bytes)
 {
 	struct iovec *io;
 	size_t length = chunk_iov_length(iov);
+	size_t drop;
 	int i;
 	char *p;
 
 	check(bytes > 0, "Tried dropping 0 bytes.");
 	check(length >= bytes, "Tried dropping more bytes then available.");
 
-	for (i = 0; bytes != 0 && i < iov->size; i++) {
+	for (i = 0; bytes > 0 && i < iov->size; i++) {
 		io = iov->io + i;
 
 		if (io->iov_len < bytes) {
+			drop = io->iov_len;
 			io->iov_len = 0;
 			io->iov_base = NULL;
 		} else {
+			drop = bytes;
 			io->iov_len -= bytes;
 			p = io->iov_base;
 			p += bytes;
 			io->iov_base = p;
 		}
+		bytes -= drop;
 	}
 	return 0;
 error:
