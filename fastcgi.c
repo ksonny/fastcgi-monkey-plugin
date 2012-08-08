@@ -21,6 +21,11 @@ MONKEY_PLUGIN("fastcgi",		/* shortname */
               VERSION,			/* version */
               MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX | MK_PLUGIN_CORE_PRCTX);
 
+const mk_pointer mk_iov_none = {
+	.data = "",
+	.len = 0,
+};
+
 static struct plugin * fcgi_global_plugin;
 
 static struct fcgi_config fcgi_global_config;
@@ -46,7 +51,7 @@ size_t fcgi_create_env(uint8_t *ptr,
 	size_t pos = 0;
 	struct sockaddr_in addr;
 	socklen_t addr_len;
-	int i, j;
+	unsigned int i, j;
 	char *hinit, *hend;
 	size_t hlen;
 
@@ -155,7 +160,7 @@ size_t fcgi_create_env(uint8_t *ptr,
 
 	strcpy(buffer, "HTTP_");
 
-	for (i = 0; i < sr->headers_toc.length; i++) {
+	for (i = 0; i < (unsigned int)sr->headers_toc.length; i++) {
 		hinit = sr->headers_toc.rows[i].init;
 		hend = sr->headers_toc.rows[i].end;
 		hlen = hend - hinit;
@@ -191,25 +196,39 @@ static int fcgi_handle_cgi_header(struct session_request *sr,
 		char *entry,
 		size_t len)
 {
+	size_t value_len;
 	char *value;
 	int status;
 
-	if (!strncasecmp(entry, "Content-type", 12)) {
-		value = entry + 12 + 2;
+	if (!strncasecmp(entry, "Content-type: ", 14)) {
+		value = entry + 14;
+		value_len = len - 14;
 		sr->headers.content_type = (mk_pointer){
 			.data = value,
-			.len = len - 14,
+			.len = value_len,
 		};
 	}
-	else if (!strncasecmp(entry, "Location", 8)) {
-		value = entry + 8 + 2;
-		sr->headers.location = strndup(value, len - 10);
+	else if (!strncasecmp(entry, "Location: ", 10)) {
+		value = entry + 10;
+		value_len = len - 10 - (*(entry + len - 2) == '\r' ? 2 : 1);
+		sr->headers.location = strndup(value, value_len);
 	}
-	else if (!strncasecmp(entry, "Status", 6)) {
-		value = entry + 6 + 2;
+	else if (!strncasecmp(entry, "Status: ", 8)) {
+		value = entry + 8;
 		check(sscanf(value, "%d", &status) == 1,
 			"Could not scan status from FastCGI return.");
 		mk_api->header_set_http_status(sr, status);
+	} else {
+		if (!sr->headers._extra_rows) {
+			sr->headers._extra_rows = mk_api->iov_create(
+					MK_PLUGIN_HEADER_EXTRA_ROWS * 2,
+					0);
+		}
+		mk_api->iov_add_entry(sr->headers._extra_rows,
+				entry,
+				len,
+				mk_iov_none,
+				0);
 	}
 	return 0;
 error:
@@ -228,11 +247,7 @@ static size_t fcgi_parse_cgi_headers(struct session_request *sr,
 			break;
 		}
 		cnt += (size_t)(q - p) + 1;
-		if (p + 1 == q) {
-			break;
-		}
-		else if (p + 1 == q) {
-			cnt += 1;
+		if (p + 2 >= q) {
 			break;
 		}
 
