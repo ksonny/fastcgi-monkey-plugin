@@ -13,7 +13,8 @@ OBJECTS = fastcgi.o \
 	request.o \
 	fcgi_fd.o \
 	fcgi_config.o \
-	fcgi_context.o
+	fcgi_context.o \
+	fcgi_env.o
 
 -include $(OBJECTS:.o=.d)
 
