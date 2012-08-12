@@ -1,3 +1,7 @@
+/* Modified version of Zed's Awesome Debug Macros.
+ *
+ * http://c.learncodethehardway.org/book/learn-c-the-hard-waych21.html
+ */
 #ifndef __DBG_H__
 #define __DBG_H__
 

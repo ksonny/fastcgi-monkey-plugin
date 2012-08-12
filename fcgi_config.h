@@ -2,7 +2,7 @@
 #define _FCGI_CONFIG_H_
 
 #include "mk_list.h"
-#include "regex.h"
+#include "regex.h" /* regex_t */
 
 struct fcgi_server {
 	char *name;

@@ -1,5 +1,5 @@
-#ifndef MK_FASTCGI_PROTOCOL
-#define MK_FASTCGI_PROTOCOL
+#ifndef _FCGI_PROTOCOL_H_
+#define _FCGI_PROTOCOL_H_
 
 #include <stdint.h>
 
@@ -144,4 +144,4 @@ mk_pointer fcgi_param_entry_key(struct fcgi_param_entry *e);
  */
 mk_pointer fcgi_param_entry_value(struct fcgi_param_entry *e);
 
-#endif // MK_FASTCGI_PROTOCOL
+#endif // _FCGI_PROTOCOL_H_

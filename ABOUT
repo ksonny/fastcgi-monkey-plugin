@@ -1,5 +1,3 @@
 FASTCGI
 =======
-
-Adds fast FastCGI support to monkey.
-
+Adds FastCGI proxy support.

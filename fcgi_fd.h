@@ -1,5 +1,5 @@
-#ifndef __FCGI_FD__
-#define __FCGI_FD__
+#ifndef _FCGI_FD_H_
+#define _FCGI_FD_H_
 
 #include "chunk.h"
 #include "fcgi_config.h"
@@ -130,4 +130,4 @@ unsigned int fcgi_fd_matrix_get(const struct fcgi_fd_matrix fdm,
 		unsigned int thread_id,
 		unsigned int server_id);
 
-#endif // __FCGI_FD__
+#endif // _FCGI_FD_H_

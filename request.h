@@ -1,10 +1,8 @@
-#ifndef __FCGI_REQUEST__
-#define __FCGI_REQUEST__
+#ifndef _REQUEST_H_
+#define _REQUEST_H_
 
 #include "protocol.h"
 #include "chunk.h"
-
-#define MAX_PACKAGES 32
 
 /**
  * enum request_state - State of request.
@@ -176,4 +174,4 @@ uint16_t request_list_index_of(struct request_list *rl, struct request *r);
 
 void request_list_free(struct request_list *rl);
 
-#endif // __FCGI_REQUEST__
+#endif // _REQUEST_H_

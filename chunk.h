@@ -1,5 +1,5 @@
-#ifndef __MK_CHUNK__
-#define __MK_CHUNK__
+#ifndef _CHUNK_H_
+#define _CHUNK_H_
 
 #include <stdint.h>
 
@@ -171,4 +171,4 @@ void chunk_iov_reset(struct chunk_iov *iov);
  */
 void chunk_iov_free(struct chunk_iov *iov);
 
-#endif // __MK_CHUNK__
+#endif // _CHUNK_H_
