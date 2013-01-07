@@ -21,6 +21,7 @@
 #include <stdio.h> /* sscanf */
 #include <ctype.h> /* toupper */
 #include <sys/socket.h> /* getsockname, getpeername */
+#include <arpa/inet.h> /* inet_ntop */
 
 #include "MKPlugin.h"
 
