@@ -145,7 +145,8 @@ int fcgi_wake_connection(int location_id)
 		mk_api->event_socket_change_mode(fd->fd,
 				MK_EPOLL_WAKEUP,
 				MK_EPOLL_LEVEL_TRIGGERED);
-		fcgi_fd_set_state(fd, FCGI_FD_READY);
+		check(!fcgi_fd_set_state(fd, FCGI_FD_READY),
+                        "[FCGI_FD %d]  State change failed.", fd->fd);
 	}
 	return 0;
 error:
@@ -209,10 +210,11 @@ int fcgi_new_connection(int location_id)
 	check_debug(fd->fd != -1, "Failed to connect to server.");
 
 	mk_api->socket_set_nonblocking(fd->fd);
-	mk_api->event_add(fd->fd,
+	check(!mk_api->event_add(fd->fd,
 			MK_EPOLL_RW,
 			plugin,
-			MK_EPOLL_LEVEL_TRIGGERED);
+			MK_EPOLL_LEVEL_TRIGGERED),
+		"[FD %d] Failed to add event.", fd->fd);
 
 	fcgi_fd_set_state(fd, FCGI_FD_READY);
 
@@ -378,9 +380,6 @@ int fcgi_send_response_headers(struct request *req)
 	check(!chunk_iov_drop(&req->iov, headers_offset),
 		"Failed to drop from req->iov.");
 	req->sr->headers.content_length = chunk_iov_length(&req->iov);
-
-	PLUGIN_TRACE("[FD %d] Headers length is %ld.",
-			req->fd, headers_offset);
 
 	mk_api->header_send(req->fd, req->cs, req->sr);
 	req->sr->headers.location = NULL;
@@ -557,8 +556,9 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 
 	do {
 		if (inherit > 0 || write.len < sizeof(h)) {
-			PLUGIN_TRACE("[FCGI_FD] New chunk, inherit %ld.",
-				inherit);
+			PLUGIN_TRACE("[FCGI_FD %d] New chunk, inherit %ld.",
+					fd->fd,
+					inherit);
 			if (pkg_size > CHUNK_SIZE(8192)) {
 				c = chunk_new(SIZE_CHUNK(pkg_size));
 			} else {
@@ -681,11 +681,8 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		return MK_PLUGIN_RET_NOT_ME;
 	}
 
-	PLUGIN_TRACE("[FD %d] URI match found.", cs->socket);
 	req = request_list_next_available(rl, location_id);
-
 	check(req, "[FD %d] No available request structs.", cs->socket);
-
 	req_id = request_list_index_of(rl, req);
 
 	check(!request_assign(req, cs->socket, location_id, cs, sr),
@@ -695,14 +692,11 @@ int _mkp_stage_30(struct plugin *plugin, struct client_session *cs,
 		"[REQ_ID %d] Failed to prepare request.", req_id);
 
 	PLUGIN_TRACE("[FD %d] Assigned to req_id %d.", cs->socket, req_id);
-	PLUGIN_TRACE("[REQ_ID %d] Request ready to be sent.", req_id);
 
 	if (fcgi_wake_connection(location_id)) {
 		PLUGIN_TRACE("[REQ_ID %d] Create new fcgi connection.", req_id);
 		check_debug(!fcgi_new_connection(location_id),
 			"New connection failed seriously.");
-	} else {
-		PLUGIN_TRACE("[REQ_ID %d] Found connection available.", req_id);
 	}
 
 	request_set_flag(req, REQ_SLEEPING);
@@ -749,10 +743,7 @@ error:
 
 void _mkp_exit()
 {
-	PLUGIN_TRACE("Free thread context list.");
 	fcgi_context_list_free(&fcgi_global_context_list);
-
-	PLUGIN_TRACE("Free configuration.");
 	fcgi_config_free(&fcgi_global_config);
 }
 
@@ -761,7 +752,6 @@ int _mkp_core_prctx(struct server_config *config)
 	struct mk_list *h;
 	struct plugin *p;
 
-	PLUGIN_TRACE("Init thread context list.");
 	check(!fcgi_context_list_init(&fcgi_global_context_list,
 				&fcgi_global_config,
 				config->workers,
@@ -790,10 +780,9 @@ void _mkp_core_thctx(void)
 	tid = fcgi_context_list_assign_thread_id(&fcgi_global_context_list);
 	check(tid != -1, "Failed to assign thread id.");
 
-	PLUGIN_TRACE("Thread assigned id %d.", tid);
-
 	cntx = fcgi_context_list_get(&fcgi_global_context_list, tid);
 	pthread_setspecific(fcgi_local_context, cntx);
+
 	return;
 error:
 	log_err("Failed to initiate thread context.");
@@ -825,7 +814,7 @@ static int hangup(int socket)
 		return MK_PLUGIN_RET_EVENT_NEXT;
 	}
 	else if (fd) {
-		PLUGIN_TRACE("[FCGI_FD %d] Hangup event received.", fd->fd);
+		PLUGIN_TRACE("[FCGI_FD %d] Hangup event.", fd->fd);
 
 		mk_api->event_del(fd->fd);
 		mk_api->socket_close(fd->fd);
@@ -851,7 +840,6 @@ static int hangup(int socket)
 		}
 
 		if (req->fcgi_fd == -1) {
-			PLUGIN_TRACE("[REQ_ID %d] Recycle failed request.", req_id);
 			request_recycle(req);
 		} else {
 			req->fd = -1;
@@ -874,7 +862,6 @@ int _mkp_event_write(int socket)
 	struct request *req = NULL;
 	struct fcgi_fd_list *fdl;
 	struct fcgi_fd *fd;
-	struct fcgi_location *locp;
 	ssize_t ret;
 
 	cntx = pthread_getspecific(fcgi_local_context);
@@ -905,7 +892,6 @@ int _mkp_event_write(int socket)
 		req_id = request_list_index_of(rl, req);
 #endif
 
-		PLUGIN_TRACE("[REQ_ID %d] Request failed.", req_id);
 		mk_api->http_request_error(MK_SERVER_INTERNAL_ERROR,
 				req->cs, req->sr);
 
@@ -922,9 +908,6 @@ int _mkp_event_write(int socket)
 		if (req) {
 			req_id = request_list_index_of(rl, req);
 			request_set_fcgi_fd(req, fd->fd);
-
-			PLUGIN_TRACE("[REQ_ID %d] Assigned to FCGI_FD %d.",
-					req_id, fd->fd);
 
 			check(!request_set_state(req, REQ_SENT),
 				"[REQ_ID %d] Failed to set sent state.",
@@ -943,15 +926,7 @@ int _mkp_event_write(int socket)
 			return _mkp_event_write(fd->fd);
 		}
 		else {
-			locp = fcgi_config_get_location(&fcgi_global_config,
-					fd->location_id);
-			check(locp,
-				"[FCGI_FD %d] Failed to get location.", fd->fd);
-			check_debug(locp->keep_alive,
-				"[FCGI_FD %d] Closing new connection, no work.", fd->fd);
-
-			PLUGIN_TRACE("[FCGI_FD %d] Putting fcgi_fd to sleep.",
-					fd->fd);
+			PLUGIN_TRACE("[FCGI_FD %d] Sleep.", fd->fd);
 
 			mk_api->event_socket_change_mode(fd->fd,
 				MK_EPOLL_SLEEP,
@@ -1033,15 +1008,16 @@ int _mkp_event_read(int socket)
 
 		check_debug(!fcgi_recv_response(fd, cl, rl, fcgi_handle_pkg),
 			"[FCGI_FD %d] Failed to receive response.", fd->fd);
-		check_debug(fd->state != FCGI_FD_CLOSING,
-			"[FCGI_FD %d] Closing connection.", fd->fd);
+
+	        if (fd->state != FCGI_FD_CLOSING) {
+                        return MK_PLUGIN_RET_EVENT_CLOSE;
+                }
 
 		PLUGIN_TRACE("[FCGI_FD %d] Data received.", fd->fd);
 
 		return MK_PLUGIN_RET_EVENT_OWNED;
 	}
 error:
-	PLUGIN_TRACE("[FCGI_FD %d] Closing connection.", socket);
 	return MK_PLUGIN_RET_EVENT_CLOSE;
 }
 
