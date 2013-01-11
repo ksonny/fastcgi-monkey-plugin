@@ -47,10 +47,6 @@ size_t fcgi_env_write(uint8_t *ptr,
 	char *hinit, *hend;
 	size_t hlen;
 
-	mk_api->pointer_set(&key,   "PATH_INFO");
-	mk_api->pointer_set(&value, "");
-	__write_param(ptr, len, pos, key, value);
-
 	mk_api->pointer_set(&key,   "GATEWAY_INTERFACE");
 	mk_api->pointer_set(&value, "CGI/1.1");
 	__write_param(ptr, len, pos, key, value);
@@ -145,10 +141,12 @@ size_t fcgi_env_write(uint8_t *ptr,
 	value = sr->content_type;
 	__write_param(ptr, len, pos, key, value);
 
-	mk_api->pointer_set(&key,   "CONTENT_LENGTH");
-	snprintf(buffer, 128, "%d", sr->content_length);
-	mk_api->pointer_set(&value, buffer);
-	__write_param(ptr, len, pos, key, value);
+	if (sr->content_length > 0) {
+		mk_api->pointer_set(&key,   "CONTENT_LENGTH");
+		snprintf(buffer, 128, "%d", sr->content_length);
+		mk_api->pointer_set(&value, buffer);
+		__write_param(ptr, len, pos, key, value);
+	}
 
 	strcpy(buffer, "HTTP_");
 
