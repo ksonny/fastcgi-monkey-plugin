@@ -169,6 +169,10 @@ int fcgi_config_read_server(struct fcgi_server *srv,
 
 	srv->max_connections = (long int)mk_api->config_section_getval(section,
 		"MaxConnections", MK_CONFIG_VAL_NUM);
+	if (srv->max_connections <= 0) {
+		srv->max_connections = 1;
+	}
+
 	srv->max_requests = (long int)mk_api->config_section_getval(section,
 		"MaxRequests", MK_CONFIG_VAL_NUM);
 
