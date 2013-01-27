@@ -189,6 +189,7 @@ int fcgi_config_read_location(struct fcgi_location *loc,
 		int server_count,
 		struct mk_config_section *section)
 {
+	static int unamed_loc_count = 0;
 	int ret = 0;
 	char error_str[80];
 	int loc_server_n = 0;
@@ -208,7 +209,11 @@ int fcgi_config_read_location(struct fcgi_location *loc,
 	server_names = mk_api->config_section_getval(section, "ServerNames",
 			MK_CONFIG_VAL_STR);
 
-	check(loc->name, "No name for this location!");
+        if (!loc->name) {
+            loc->name = mk_api->mem_alloc_z(24);
+            snprintf(loc->name, 24, "location_%d", unamed_loc_count);
+            unamed_loc_count += 1;
+        }
 
 	check(regex, "No match regex defined for this location.");
 	for (tok = regex; *tok != '\0'; tok++) {
