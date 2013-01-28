@@ -1009,7 +1009,7 @@ int _mkp_event_read(int socket)
 		check_debug(!fcgi_recv_response(fd, cl, rl, fcgi_handle_pkg),
 			"[FCGI_FD %d] Failed to receive response.", fd->fd);
 
-	        if (fd->state != FCGI_FD_CLOSING) {
+	        if (fd->state == FCGI_FD_CLOSING) {
                         return MK_PLUGIN_RET_EVENT_CLOSE;
                 }
 
