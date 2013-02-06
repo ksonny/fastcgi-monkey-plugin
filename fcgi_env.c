@@ -149,6 +149,12 @@ size_t fcgi_env_write(uint8_t *ptr,
 		__write_param(ptr, len, pos, key, value);
 	}
 
+	if (!strcmp(mk_api->config->transport, MK_TRANSPORT_HTTPS)) {
+		mk_api->pointer_set(&key, "HTTPS");
+		mk_api->pointer_set(&value, "on");
+		__write_param(ptr, len, pos, key, value);
+	}
+
 	strcpy(buffer, "HTTP_");
 
 	for (i = 0; i < (unsigned int)sr->headers_toc.length; i++) {
