@@ -354,7 +354,7 @@ int fcgi_send_abort_request(struct request *req, struct fcgi_fd *fd)
 	check(h.req_id > 0, "Bad request id: %d.", h.req_id);
 	fcgi_write_header(buf, &h);
 
-	ret = mk_api->socket_send(fd->fd, buf, sizeof(h));
+	ret = write(fd->fd, buf, sizeof(h));
 	check(ret != -1, "Socket error.");
 
 	return 0;
@@ -395,11 +395,16 @@ int fcgi_send_response(struct request *req)
 {
 	int fd = req->fd;
 	ssize_t ret;
+	struct mk_iov mkiov;
 
 	check(request_get_flag(req, REQ_HEADERS_SENT),
 		"Headers not yet sent for request.");
 
-	ret = chunk_iov_sendv(fd, &req->iov);
+        memset(&mkiov, 0, sizeof(mkiov));
+        mkiov.io = req->iov.io;
+        mkiov.iov_idx = req->iov.index;
+        mkiov.total_len = chunk_iov_length(&req->iov);
+	ret = mk_api->socket_sendv(fd, &mkiov);
 
 	PLUGIN_TRACE("[FD %d] Wrote %ld bytes.", fd, ret);
 	check(ret != -1, "[FD %d] Failed to send request response.", fd);
@@ -534,7 +539,7 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 		int (*handle_pkg)(struct fcgi_fd *fd,
 			struct request *req,
 			struct fcgi_header h,
-			struct chunk_ptr read))
+			struct chunk_ptr rcp))
 {
 	size_t pkg_size = 0, inherit = 0;
 	ssize_t ret = 0;
@@ -543,19 +548,19 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 	struct fcgi_header h;
 	struct request *req;
 	struct chunk *c;
-	struct chunk_ptr write = { .len = 0, .data = NULL, .parent = NULL};
-	struct chunk_ptr read = { .len = 0, .data = NULL, .parent = NULL};
+	struct chunk_ptr wcp = { .len = 0, .data = NULL, .parent = NULL};
+	struct chunk_ptr rcp = { .len = 0, .data = NULL, .parent = NULL};
 
 	PLUGIN_TRACE("[FCGI_FD %d] Receiving response.", fd->fd);
 
 	c = fcgi_fd_get_chunk(fd);
 	if (c != NULL) {
-		write = chunk_write_ptr(c);
-		read  = chunk_read_ptr(c);
+		wcp = chunk_write_ptr(c);
+		rcp  = chunk_read_ptr(c);
 	}
 
 	do {
-		if (inherit > 0 || write.len < sizeof(h)) {
+		if (inherit > 0 || wcp.len < sizeof(h)) {
 			PLUGIN_TRACE("[FCGI_FD %d] New chunk, inherit %ld.",
 					fd->fd,
 					inherit);
@@ -568,11 +573,11 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 			chunk_list_add(cl, c);
 			check(!fcgi_fd_set_chunk(fd, c, inherit),
 				"[FCGI_FD %d] Failed to add chunk.", fd->fd);
-			write = chunk_write_ptr(c);
+			wcp = chunk_write_ptr(c);
 			inherit = 0;
 		}
 
-		ret = mk_api->socket_read(fd->fd, write.data, write.len);
+		ret = read(fd->fd, wcp.data, wcp.len);
 
 		if (ret == 0) {
 			check(!fcgi_fd_set_state(fd, FCGI_FD_CLOSING),
@@ -586,38 +591,38 @@ int fcgi_recv_response(struct fcgi_fd *fd,
 				sentinel("Socket read error.");
 			}
 		} else {
-			write.data += ret;
-			write.len  -= ret;
-			check(!chunk_set_write_ptr(c, write),
+			wcp.data += ret;
+			wcp.len  -= ret;
+			check(!chunk_set_write_ptr(c, wcp),
 				"Failed to set new write ptr.");
-			read = chunk_read_ptr(c);
+			rcp = chunk_read_ptr(c);
 		}
 
-		while (read.len > 0) {
-			if (read.len < sizeof(h)) {
+		while (rcp.len > 0) {
+			if (rcp.len < sizeof(h)) {
 				pkg_size = sizeof(h);
 			} else {
-				fcgi_read_header(read.data, &h);
+				fcgi_read_header(rcp.data, &h);
 				pkg_size = sizeof(h) + h.body_len + h.body_pad;
 			}
 
-			if (read.len < pkg_size) {
-				inherit = read.len;
+			if (rcp.len < pkg_size) {
+				inherit = rcp.len;
 				ret     = inherit;
 			} else {
 				req = request_list_get(rl, h.req_id);
-				check_debug(!handle_pkg(fd, req, h, read),
+				check_debug(!handle_pkg(fd, req, h, rcp),
 					"[REQ_ID %d] Failed to handle pkg.",
 					h.req_id);
 				ret = pkg_size;
 			}
 
-			read.data += ret;
-			read.len  -= ret;
+			rcp.data += ret;
+			rcp.len  -= ret;
 		}
 
-		if (read.parent == c) {
-			check(!chunk_set_read_ptr(c, read),
+		if (rcp.parent == c) {
+			check(!chunk_set_read_ptr(c, rcp),
 				"Failed to set new read ptr.");
 		}
 	} while (!done);
@@ -817,7 +822,7 @@ static int hangup(int socket)
 		PLUGIN_TRACE("[FCGI_FD %d] Hangup event.", fd->fd);
 
 		mk_api->event_del(fd->fd);
-		mk_api->socket_close(fd->fd);
+		close(fd->fd);
 
 		state = fd->state;
 
