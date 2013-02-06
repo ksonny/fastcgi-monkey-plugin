@@ -35,7 +35,7 @@
 
 MONKEY_PLUGIN("fastcgi",		/* shortname */
               "FastCGI client",		/* name */
-              VERSION,			/* version */
+              "0.2",			/* version */
               MK_PLUGIN_STAGE_30 | MK_PLUGIN_CORE_THCTX | MK_PLUGIN_CORE_PRCTX);
 
 const mk_pointer mk_iov_none = {
